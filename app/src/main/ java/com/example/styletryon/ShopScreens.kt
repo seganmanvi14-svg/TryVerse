@@ -214,3 +214,66 @@ fun HomeScreen(
         item { ProductGrid(catalog.take(6), wishlist, onWish, onProduct) }
     }
 }
+// ---------------------------------------------------------------------
+//  Categories: search + chips + sort spinner + grid
+// ---------------------------------------------------------------------
+
+@Composable
+fun CategoriesScreen(category: String, onCategory: (String) -> Unit, wishlist: List<Int>, onWish: (Product) -> Unit, onProduct: (Product) -> Unit) {
+    var query by remember { mutableStateOf("") }
+    val sortOptions = listOf("Popular", "Price: Low to High", "Price: High to Low", "Top Rated")
+    var sort by remember { mutableStateOf(sortOptions[0]) }
+    var sortOpen by remember { mutableStateOf(false) }
+
+    var shown = catalog.filter {
+        (category == "All" || it.category == category) &&
+                (query.isBlank() || it.name.contains(query, true) || it.category.contains(query, true))
+    }
+    shown = when (sort) {
+        "Price: Low to High" -> shown.sortedBy { it.price }
+        "Price: High to Low" -> shown.sortedByDescending { it.price }
+        "Top Rated" -> shown.sortedByDescending { it.rating }
+        else -> shown.sortedByDescending { it.reviews }
+    }
+
+    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+        Spacer(Modifier.height(12.dp))
+        Text("Categories", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Ink)
+        Spacer(Modifier.height(10.dp))
+        OutlinedTextField(
+            value = query, onValueChange = { query = it },
+            modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(24.dp), singleLine = true,
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            placeholder = { Text("Search for tops, dresses, jeans...") },
+            colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = Color.White, focusedContainerColor = Color.White)
+        )
+        Spacer(Modifier.height(10.dp))
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            categories.forEach { FilterChip(selected = category == it, onClick = { onCategory(it) }, label = { Text(it) }) }
+        }
+        // Spinner (drop-down) for sorting
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("${shown.size} items", color = Muted, fontSize = 13.sp)
+            Spacer(Modifier.weight(1f))
+            Box {
+                TextButton(onClick = { sortOpen = true }) {
+                    Text("Sort: $sort", fontSize = 13.sp)
+                    Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                }
+                DropdownMenu(expanded = sortOpen, onDismissRequest = { sortOpen = false }) {
+                    sortOptions.forEach { option ->
+                        DropdownMenuItem(text = { Text(option) }, onClick = { sort = option; sortOpen = false })
+                    }
+                }
+            }
+        }
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(bottom = 16.dp)
+        ) {
+            items(shown.size) { i -> ProductCard(shown[i], wishlist.contains(shown[i].id), onWish, onProduct) }
+        }
+    }
+}
