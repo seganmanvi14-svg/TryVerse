@@ -119,3 +119,98 @@ fun QuantityStepper(qty: Int, onChange: (Int) -> Unit) {
         }
     }
 }
+
+// ---------------------------------------------------------------------
+//  Home
+// ---------------------------------------------------------------------
+
+@Composable
+fun HomeScreen(
+    userName: String,
+    wishlist: List<Int>,
+    onWish: (Product) -> Unit,
+    onProduct: (Product) -> Unit,
+    onCategory: (String) -> Unit,
+    onShopNow: () -> Unit
+) {
+    val firstName = userName.substringBefore(" ")
+    val context = LocalContext.current
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Hi, $firstName! 👋", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Ink)
+                    Text("Find outfits that match your vibe", color = Muted, fontSize = 13.sp)
+                }
+                IconButton(onClick = { Toast.makeText(context, "No new notifications", Toast.LENGTH_SHORT).show() }) {
+                    Icon(Icons.Default.NotificationsNone, contentDescription = "Notifications", tint = Ink)
+                }
+                Box(Modifier.size(40.dp).clip(CircleShape).background(Accent), contentAlignment = Alignment.Center) {
+                    Text(firstName.take(1).uppercase(), color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+        // Search bar (opens Categories)
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    Modifier.weight(1f).height(48.dp).clip(RoundedCornerShape(24.dp)).background(Color.White)
+                        .clickable { onCategory("All") }.padding(horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Search, contentDescription = null, tint = Muted)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Search for tops, dresses, jeans...", color = Muted, fontSize = 13.sp)
+                }
+                Spacer(Modifier.width(10.dp))
+                IconButton(
+                    onClick = { onCategory("All") },
+                    modifier = Modifier.size(48.dp).clip(RoundedCornerShape(16.dp)).background(Color.White)
+                ) { Icon(Icons.Default.Tune, contentDescription = "Filters", tint = Ink) }
+            }
+        }
+        // Category circles
+        item {
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                categories.drop(1).forEach { cat ->
+                    val sample = catalog.first { it.category == cat }
+                    Column(Modifier.clickable { onCategory(cat) }, horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(Modifier.size(58.dp).clip(CircleShape).background(sample.color.copy(alpha = 0.2f)), contentAlignment = Alignment.Center) {
+                            Image(painterResource(sample.image), contentDescription = cat, modifier = Modifier.size(38.dp))
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Text(cat, fontSize = 11.sp, color = Ink)
+                    }
+                }
+            }
+        }
+        // Banner
+        item {
+            Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFF7E8EE))) {
+                Row(Modifier.height(165.dp)) {
+                    Column(Modifier.weight(1f).padding(18.dp), verticalArrangement = Arrangement.SpaceBetween) {
+                        Column {
+                            Text("New Season\nNew You", fontSize = 24.sp, color = Brand, fontWeight = FontWeight.SemiBold, lineHeight = 28.sp)
+                            Spacer(Modifier.height(4.dp))
+                            Text("Trendy fits, effortless styles", color = Muted, fontSize = 12.sp)
+                        }
+                        Button(onClick = onShopNow, shape = RoundedCornerShape(24.dp), contentPadding = PaddingValues(horizontal = 16.dp)) {
+                            Text("Try Now", fontSize = 13.sp)
+                            Spacer(Modifier.width(4.dp))
+                            Icon(Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                    DemoModelTryOn(catalog[1], Modifier.width(130.dp).fillMaxHeight())
+                }
+            }
+        }
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Trending Now", fontSize = 19.sp, fontWeight = FontWeight.Bold, color = Ink)
+                Spacer(Modifier.weight(1f))
+                Text("See All", color = Primary, fontSize = 13.sp, modifier = Modifier.clickable { onCategory("All") })
+            }
+        }
+        item { ProductGrid(catalog.take(6), wishlist, onWish, onProduct) }
+    }
+}
