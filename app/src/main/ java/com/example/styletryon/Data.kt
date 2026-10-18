@@ -84,3 +84,125 @@ fun pairsWith(product: Product): List<Product> = when (product.type) {
     "TOP" -> catalog.filter { it.type == "PANTS" }
     else -> catalog.filter { it.type == "DRESS" && it.id != product.id } + catalog.filter { it.type == "TOP" }.take(2)
 }
+
+// =====================================================================
+//  SQLite database: user accounts (Sign Up / Login)
+//  Passwords are never stored. We store a random salt and a PBKDF2 hash of the password,
+//  so even someone who copies the database cannot read the passwords.
+// =====================================================================
+
+data class User(val name: String, val email: String, val phone: String)
+
+object PasswordHasher {
+    private const val ITERATIONS = 120_000
+    private const val KEY_BITS = 256
+
+    fun newSalt(): ByteArray = ByteArray(16).also { SecureRandom().nextBytes(it) }
+
+    fun hash(password: String, salt: ByteArray): ByteArray {
+        val spec = PBEKeySpec(password.toCharArray(), salt, ITERATIONS, KEY_BITS)
+        return try {
+            SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded
+        } finally {
+            spec.clearPassword()
+        }
+    }
+
+    /** Compares in constant time so the check can't be timed to guess the password. */
+    fun matches(password: String, salt: ByteArray, expected: ByteArray) =
+        MessageDigest.isEqual(hash(password, salt), expected)
+}
+
+class UserDatabase(context: Context) : SQLiteOpenHelper(context, "tryverse.db", null, 2) {
+
+    override fun onCreate(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE users (email TEXT PRIMARY KEY, name TEXT, phone TEXT, salt TEXT, hash TEXT)")
+    }
+
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        db.execSQL("DROP TABLE IF EXISTS users")
+        onCreate(db)
+    }
+
+    private fun b64(bytes: ByteArray) = Base64.encodeToString(bytes, Base64.NO_WRAP)
+    private fun unb64(text: String) = Base64.decode(text, Base64.NO_WRAP)
+
+    /** Returns false if the email is already registered. (Queries use ? placeholders, so no SQL injection.) */
+    fun addUser(name: String, email: String, phone: String, password: String): Boolean {
+        val salt = PasswordHasher.newSalt()
+        val values = ContentValues().apply {
+            put("email", email.lowercase()); put("name", name); put("phone", phone)
+            put("salt", b64(salt)); put("hash", b64(PasswordHasher.hash(password, salt)))
+        }
+        return writableDatabase.insert("users", null, values) != -1L
+    }
+
+    fun login(email: String, password: String): User? =
+        readableDatabase.rawQuery("SELECT name, phone, salt, hash FROM users WHERE email = ?", arrayOf(email.lowercase())).use {
+            if (it.moveToFirst() && PasswordHasher.matches(password, unb64(it.getString(2)), unb64(it.getString(3))))
+                User(it.getString(0), email.lowercase(), it.getString(1))
+            else null
+        }
+
+    fun getUser(email: String): User? =
+        readableDatabase.rawQuery("SELECT name, phone FROM users WHERE email = ?", arrayOf(email.lowercase())).use {
+            if (it.moveToFirst()) User(it.getString(0), email.lowercase(), it.getString(1)) else null
+        }
+
+    fun updateUser(email: String, name: String, phone: String) {
+        val values = ContentValues().apply { put("name", name); put("phone", phone) }
+        writableDatabase.update("users", values, "email = ?", arrayOf(email.lowercase()))
+    }
+}
+
+/** Input checks used by Sign Up / Login / Edit Profile. */
+object Validate {
+    private val emailRegex = Regex("^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,190}\\.[A-Za-z]{2,24}$")
+    private val phoneRegex = Regex("^[+]?[0-9 ]{8,16}$")
+    fun email(e: String) = emailRegex.matches(e)
+    fun phone(p: String) = phoneRegex.matches(p)
+    fun name(n: String) = n.trim().length in 2..40
+    /** At least 8 characters with a letter and a number. */
+    fun password(p: String) = p.length in 8..64 && p.any { it.isLetter() } && p.any { it.isDigit() }
+}
+
+// =====================================================================
+//  File handling: session.txt (who is logged in) and orders.csv
+// =====================================================================
+
+fun saveSession(context: Context, email: String) = File(context.filesDir, "session.txt").writeText(email)
+
+fun loadSession(context: Context): String? {
+    val file = File(context.filesDir, "session.txt")
+    return if (file.exists()) file.readText().trim().ifEmpty { null } else null
+}
+
+fun clearSession(context: Context) {
+    File(context.filesDir, "session.txt").delete()
+}
+
+data class Order(val id: String, val date: String, val items: String, val total: Int, val status: String, val productId: Int)
+
+private fun ordersFile(context: Context) = File(context.filesDir, "orders.csv")
+
+/** Adds one line to orders.csv:  id,date,items,total,status,productId */
+fun saveOrder(context: Context, items: List<CartItem>, total: Int) {
+    val id = "TV" + (System.currentTimeMillis() % 100000)
+    val date = SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date())
+    val names = items.joinToString(" + ") { it.product.name }.replace(",", " ")
+    ordersFile(context).appendText("$id,$date,$names,$total,Processing,${items.first().product.id}\n")
+}
+
+/** Reads all orders from orders.csv (newest first). */
+fun loadOrders(context: Context): List<Order> {
+    val file = ordersFile(context)
+    if (!file.exists()) return emptyList()
+    return file.readLines().mapNotNull { line ->
+        val p = line.split(",")
+        if (p.size < 6) null else Order(p[0], p[1], p[2], p[3].toIntOrNull() ?: 0, p[4], p[5].toIntOrNull() ?: 1)
+    }.reversed()
+}
+
+fun clearOrders(context: Context) {
+    ordersFile(context).delete()
+}
