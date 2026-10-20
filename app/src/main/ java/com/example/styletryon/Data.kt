@@ -206,3 +206,4 @@ fun loadOrders(context: Context): List<Order> {
 fun clearOrders(context: Context) {
     ordersFile(context).delete()
 }
+
