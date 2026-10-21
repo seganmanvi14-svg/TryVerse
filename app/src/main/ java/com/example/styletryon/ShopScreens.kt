@@ -34,6 +34,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+// ---------------------------------------------------------------------
+//  Shared pieces
+// ---------------------------------------------------------------------
 
 /** Garment photo on a soft background. */
 @Composable
@@ -120,9 +123,8 @@ fun QuantityStepper(qty: Int, onChange: (Int) -> Unit) {
     }
 }
 
-// ---------------------------------------------------------------------
+
 //  Home
-// ---------------------------------------------------------------------
 
 @Composable
 fun HomeScreen(
@@ -214,9 +216,8 @@ fun HomeScreen(
         item { ProductGrid(catalog.take(6), wishlist, onWish, onProduct) }
     }
 }
-// ---------------------------------------------------------------------
+
 //  Categories: search + chips + sort spinner + grid
-// ---------------------------------------------------------------------
 
 @Composable
 fun CategoriesScreen(category: String, onCategory: (String) -> Unit, wishlist: List<Int>, onWish: (Product) -> Unit, onProduct: (Product) -> Unit) {
@@ -275,5 +276,194 @@ fun CategoriesScreen(category: String, onCategory: (String) -> Unit, wishlist: L
         ) {
             items(shown.size) { i -> ProductCard(shown[i], wishlist.contains(shown[i].id), onWish, onProduct) }
         }
+    }
+}
+
+//  Saved items (wishlist)
+
+@Composable
+fun SavedScreen(wishlist: List<Int>, onWish: (Product) -> Unit, onProduct: (Product) -> Unit, onBack: () -> Unit) {
+    val items = catalog.filter { wishlist.contains(it.id) }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+        TopBar("Saved Items", onBack)
+        Spacer(Modifier.height(8.dp))
+        if (items.isEmpty()) {
+            Column(Modifier.fillMaxWidth().padding(top = 80.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(Icons.Default.FavoriteBorder, contentDescription = null, tint = Rose, modifier = Modifier.size(56.dp))
+                Text("Nothing saved yet", fontWeight = FontWeight.Bold)
+                Text("Tap the ♡ on any product to save it here.", color = Muted, textAlign = TextAlign.Center)
+            }
+        } else {
+            ProductGrid(items, wishlist, onWish, onProduct)
+        }
+    }
+}
+//  Product detail
+
+@Composable
+fun ProductDetailScreen(product: Product, wishlisted: Boolean, onBack: () -> Unit, onWish: () -> Unit, onAdd: (Product, String) -> Unit, onTry: () -> Unit) {
+    val context = LocalContext.current
+    var chosenSize by remember(product.id) { mutableStateOf(product.sizes[2]) }
+    var qty by remember(product.id) { mutableIntStateOf(1) }
+    var showOnModel by remember(product.id) { mutableStateOf(false) }
+    var showSizeGuide by remember { mutableStateOf(false) }
+    var shareMenu by remember { mutableStateOf(false) }
+    val discount = 100 - product.price * 100 / product.oldPrice
+
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "Back") }
+            Spacer(Modifier.weight(1f))
+            IconButton(onClick = onWish) {
+                Icon(if (wishlisted) Icons.Default.Favorite else Icons.Default.FavoriteBorder, contentDescription = "Save", tint = Rose)
+            }
+            Box {
+                IconButton(onClick = { shareMenu = true }) { Icon(Icons.Default.Share, contentDescription = "Share") }
+                DropdownMenu(expanded = shareMenu, onDismissRequest = { shareMenu = false }) {
+                    listOf("Copy link", "Share on WhatsApp", "Share on Instagram").forEach { option ->
+                        DropdownMenuItem(text = { Text(option) }, onClick = {
+                            shareMenu = false
+                            Toast.makeText(context, "$option: ${product.name}", Toast.LENGTH_SHORT).show()
+                        })
+                    }
+                }
+            }
+        }
+        // Big image + thumbnails (product photo / on the model)
+        Row(Modifier.height(330.dp)) {
+            Box(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(20.dp)).background(Sand)) {
+                if (showOnModel) DemoModelTryOn(product, Modifier.fillMaxSize())
+                else ProductImage(product, Modifier.fillMaxSize(), padding = 20)
+            }
+            Spacer(Modifier.width(10.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                ProductImage(
+                    product,
+                    Modifier.size(56.dp, 70.dp).border(2.dp, if (!showOnModel) Primary else Color.Transparent, RoundedCornerShape(16.dp))
+                        .clickable { showOnModel = false },
+                    padding = 6
+                )
+                Box(
+                    Modifier.size(56.dp, 70.dp).clip(RoundedCornerShape(16.dp))
+                        .border(2.dp, if (showOnModel) Primary else Color.Transparent, RoundedCornerShape(16.dp))
+                        .clickable { showOnModel = true }
+                ) { DemoModelTryOn(product, Modifier.fillMaxSize()) }
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(product.name, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Ink, modifier = Modifier.weight(1f))
+            RatingText(product)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(rupees(product.price), fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Ink)
+            Spacer(Modifier.width(8.dp))
+            Text(rupees(product.oldPrice), color = Muted, textDecoration = TextDecoration.LineThrough)
+            Spacer(Modifier.width(8.dp))
+            Text(
+                "$discount% OFF", color = Rose, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(Rose.copy(alpha = 0.12f)).padding(horizontal = 6.dp, vertical = 2.dp)
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(product.description, color = Muted, fontSize = 13.sp)
+
+        Spacer(Modifier.height(14.dp))
+        Text("Color: ${product.colorName}", fontWeight = FontWeight.SemiBold, color = Ink)
+        Spacer(Modifier.height(6.dp))
+        Box(Modifier.size(34.dp).clip(CircleShape).border(2.dp, Primary, CircleShape).padding(4.dp).clip(CircleShape).background(product.color))
+
+        Spacer(Modifier.height(10.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Size", fontWeight = FontWeight.SemiBold, color = Ink)
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = { showSizeGuide = true }) {
+                Icon(Icons.Default.Straighten, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Size Guide", fontSize = 12.sp)
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            product.sizes.forEach { s -> FilterChip(selected = chosenSize == s, onClick = { chosenSize = s }, label = { Text(s) }) }
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Quantity", fontWeight = FontWeight.SemiBold, color = Ink)
+            Spacer(Modifier.width(16.dp))
+            QuantityStepper(qty, onChange = { qty = it })
+        }
+        Spacer(Modifier.height(18.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Button(
+                onClick = onTry, modifier = Modifier.weight(1f).height(52.dp), shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryLight, contentColor = Primary)
+            ) {
+                Icon(Icons.Default.PhotoCamera, contentDescription = null)
+                Spacer(Modifier.width(6.dp))
+                Text("Try This On")
+            }
+            Button(
+                onClick = {
+                    repeat(qty) { onAdd(product, chosenSize) }
+                    Toast.makeText(context, "Added to cart: ${product.name} ($chosenSize) × $qty", Toast.LENGTH_SHORT).show()
+                },
+                modifier = Modifier.weight(1f).height(52.dp), shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryDark)
+            ) {
+                Icon(Icons.Default.ShoppingBag, contentDescription = null)
+                Spacer(Modifier.width(6.dp))
+                Text("Add to Cart")
+            }
+        }
+    }
+
+    if (showSizeGuide) {
+        AlertDialog(
+            onDismissRequest = { showSizeGuide = false },
+            title = { Text("Size Guide (inches)") },
+            text = {
+                Column {
+                    listOf("Size   Chest   Waist", "XS      32       26", "S        34       28", "M        36       30", "L         38       32", "XL       40       34")
+                        .forEach { Text(it, fontFamily = FontFamily.Monospace) }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showSizeGuide = false }) { Text("Got it") } }
+        )
+    }
+}
+
+//  Complete Your Look
+
+@Composable
+fun CompleteLookScreen(product: Product, wishlist: List<Int>, onWish: (Product) -> Unit, onAdd: (Product) -> Unit, onBack: () -> Unit, onCart: () -> Unit) {
+    val context = LocalContext.current
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        TopBar("Complete Your Look", onBack)
+        Text("Pair your ${product.name} with these ✨", color = Muted, modifier = Modifier.padding(start = 12.dp, bottom = 8.dp))
+        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            items(pairsWith(product)) { p ->
+                Card(shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+                    Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        ProductImage(p, Modifier.size(76.dp, 86.dp), padding = 6)
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(p.name, fontWeight = FontWeight.SemiBold, color = Ink)
+                            Text(p.colorName, color = Muted, fontSize = 12.sp)
+                            Text(rupees(p.price), fontWeight = FontWeight.Bold, color = Ink)
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            IconButton(onClick = { onWish(p) }) {
+                                Icon(if (wishlist.contains(p.id)) Icons.Default.Favorite else Icons.Default.FavoriteBorder, contentDescription = "Save", tint = Rose)
+                            }
+                            IconButton(
+                                onClick = { onAdd(p); Toast.makeText(context, "${p.name} added to cart", Toast.LENGTH_SHORT).show() },
+                                modifier = Modifier.size(34.dp).clip(CircleShape).background(PrimaryLight)
+                            ) { Icon(Icons.Default.Add, contentDescription = "Add", tint = Primary) }
+                        }
+                    }
+                }
+            }
+        }
+        PrimaryButton("Go to Cart", Modifier.fillMaxWidth(), Icons.Default.ArrowForward, onCart)
     }
 }
