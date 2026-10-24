@@ -298,3 +298,267 @@ fun cropPhoto(photo: Bitmap, frameW: Float, frameH: Float, zoom: Float, pan: Off
     canvas.drawBitmap(photo, matrix, android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG))
     return out
 }
+
+// ---------------------------------------------------------------------
+//  3. Trying it on (AI, or quick on-device preview)
+// ---------------------------------------------------------------------
+
+/** Colours for "Try Another Color" (name is sent to the AI). */
+val tryColors = listOf(
+    "pink" to Color(0xFFF2A7AE),
+    "beige" to Color(0xFFE6DACB),
+    "sky blue" to Color(0xFF79B4F2),
+    "charcoal black" to Color(0xFF3A3D48),
+    "lilac" to Color(0xFFC6B1EE)
+)
+
+/**
+ * Makes the try-on picture.
+ * [base] = picture to edit (the person photo, or the last AI result when only the colour changes).
+ * onDone(picture, madeByAi)
+ */
+@Composable
+fun ProcessingScreen(base: Bitmap, person: Bitmap, product: Product, colorName: String?, tint: Color?, onDone: (Bitmap, Boolean) -> Unit, onFail: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var step by remember { mutableIntStateOf(0) }
+    var aiError by remember { mutableStateOf<String?>(null) }
+    val progress by animateFloatAsState(targetValue = (step + 1) / 4f, label = "progress")
+
+    // Quick preview: fit the garment photo to the body on the phone (no internet)
+    fun quickPreview() {
+        aiError = null
+        scope.launch {
+            step = 1
+            val body = detectBody(person)
+            if (body == null) {
+                Toast.makeText(context, "Couldn't find a person. Try a clear, front-facing photo.", Toast.LENGTH_LONG).show()
+                onFail()
+                return@launch
+            }
+            step = 2; delay(300)
+            val look = renderLook(context, person, body, product, tint)
+            step = 3; delay(200)
+            onDone(look, false)
+        }
+    }
+
+    LaunchedEffect(base, product, colorName) {
+        step = 1
+        try {
+            val look = AiTryOn.dress(context, base, product, colorName)
+            step = 3; delay(300)
+            onDone(look, true)
+        } catch (e: AiTryOn.TryOnException) {
+            aiError = e.message
+        }
+    }
+
+    Column(
+        Modifier.fillMaxSize().padding(28.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Box(Modifier.size(110.dp).clip(CircleShape).background(PrimaryLight), contentAlignment = Alignment.Center) {
+            Icon(Icons.Default.AutoFixHigh, contentDescription = null, tint = Primary, modifier = Modifier.size(50.dp))
+        }
+        Spacer(Modifier.height(20.dp))
+        Text("Trying It On...", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Ink)
+        Text("This takes about 10–20 seconds", color = Muted)
+        Spacer(Modifier.height(20.dp))
+        LinearProgressIndicator(
+            progress = { progress }, modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
+            color = Primary, trackColor = PrimaryLight
+        )
+        Spacer(Modifier.height(24.dp))
+        Text("Our AI is dressing you in the ${product.name}", color = Muted, fontSize = 13.sp, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(10.dp))
+        listOf("Sending your photo securely...", "Fitting the outfit to your body...", "Rendering your look...").forEachIndexed { i, label ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (step == i + 1 && step < 3) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp, color = Primary)
+                else Icon(
+                    if (step > i) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                    contentDescription = null, tint = if (step > i) Primary else Muted
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(label, color = Ink, fontSize = 14.sp)
+            }
+        }
+    }
+
+    // AI not available -> offer the quick preview
+    if (aiError != null) {
+        AlertDialog(
+            onDismissRequest = { onFail() },
+            icon = { Icon(Icons.Default.CloudOff, contentDescription = null) },
+            title = { Text("AI try-on unavailable") },
+            text = { Text("${aiError}\n\nWould you like a quick preview made on your phone instead?") },
+            confirmButton = { Button(onClick = { quickPreview() }) { Text("Quick Preview") } },
+            dismissButton = { TextButton(onClick = { onFail() }) { Text("Go Back") } }
+        )
+    }
+}
+
+/**
+ * Finds the person in the photo:
+ *  - ML Kit Pose Detection  -> shoulders, hips, ankles
+ *  - ML Kit Selfie Segmentation -> which pixels are the person (used to measure body width)
+ */
+suspend fun detectBody(photo: Bitmap): Body? {
+    val image = InputImage.fromBitmap(photo, 0)
+    val body = suspendCoroutine<Body?> { cont ->
+        val detector = PoseDetection.getClient(
+            PoseDetectorOptions.Builder().setDetectorMode(PoseDetectorOptions.SINGLE_IMAGE_MODE).build()
+        )
+        detector.process(image)
+            .addOnSuccessListener { pose -> cont.resume(poseToBody(pose)) }
+            .addOnFailureListener { cont.resume(null) }
+            .addOnCompleteListener { detector.close() }
+    } ?: return null
+    val mask = suspendCoroutine<PersonMask?> { cont ->
+        val segmenter = Segmentation.getClient(
+            SelfieSegmenterOptions.Builder().setDetectorMode(SelfieSegmenterOptions.SINGLE_IMAGE_MODE).build()
+        )
+        segmenter.process(image)
+            .addOnSuccessListener { m ->
+                val values = FloatArray(m.width * m.height)
+                m.buffer.rewind()
+                m.buffer.asFloatBuffer().get(values)
+                cont.resume(PersonMask(values, m.width, m.height))
+            }
+            .addOnFailureListener { cont.resume(null) }
+            .addOnCompleteListener { segmenter.close() }
+    }
+    return body.copy(mask = mask)
+}
+
+// ---------------------------------------------------------------------
+//  4. Result
+// ---------------------------------------------------------------------
+
+@Composable
+fun ResultScreen(
+    look: Bitmap, madeByAi: Boolean, product: Product,
+    onProduct: (Product) -> Unit, onBack: () -> Unit, onCompare: () -> Unit, onAddToCart: () -> Unit
+) {
+    val context = LocalContext.current
+    val image = remember(look) { look.asImageBitmap() }
+
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        TopBar("Your Try-On Result", onBack) {
+            IconButton(onClick = { shareLook(context, look) }) { Icon(Icons.Default.Share, contentDescription = "Share", tint = Ink) }
+        }
+        Box(Modifier.weight(1f).aspectRatio(0.75f).align(Alignment.CenterHorizontally).clip(RoundedCornerShape(20.dp))) {
+            Image(image, contentDescription = "Your look", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+            Text(
+                if (madeByAi && AiTryOn.lastAnalysis.isNotBlank()) "✨ AI styled" else "Fitted to you",
+                Modifier.align(Alignment.TopStart).padding(12.dp).clip(RoundedCornerShape(20.dp))
+                    .background(Color.Black.copy(alpha = 0.45f)).padding(horizontal = 10.dp, vertical = 5.dp),
+                color = Color.White, fontSize = 11.sp
+            )
+            Row(
+                Modifier.align(Alignment.BottomEnd).padding(12.dp).clip(RoundedCornerShape(20.dp)).background(Color.White)
+                    .clickable { onCompare() }.padding(horizontal = 12.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Default.Compare, contentDescription = null, tint = Ink, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(5.dp))
+                Text("Compare", fontSize = 12.sp, color = Ink)
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        // Switch outfit (makes a new try-on)
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(catalog) { p ->
+                ProductImage(
+                    p,
+                    Modifier.size(62.dp, 72.dp).border(2.dp, if (p.id == product.id) Primary else Color.Transparent, RoundedCornerShape(16.dp))
+                        .clickable { if (p.id != product.id) onProduct(p) },
+                    padding = 5
+                )
+            }
+        }
+        // Gemini's style tip (only when Firebase is set up)
+        if (madeByAi && AiTryOn.lastAnalysis.isNotBlank()) {
+            Spacer(Modifier.height(8.dp))
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(PrimaryLight).padding(12.dp)) {
+                Text("✨ AI Style Analysis", fontWeight = FontWeight.Bold, color = Primary, fontSize = 13.sp)
+                Text(AiTryOn.lastAnalysis, color = Ink, fontSize = 12.sp)
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Button(
+                onClick = {
+                    val saved = saveToGallery(context, look) != null
+                    Toast.makeText(context, if (saved) "Look saved to Pictures/TryVerse" else "Could not save", Toast.LENGTH_SHORT).show()
+                },
+                modifier = Modifier.weight(1f).height(52.dp), shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryLight, contentColor = Primary)
+            ) {
+                Icon(Icons.Default.BookmarkBorder, contentDescription = null)
+                Spacer(Modifier.width(6.dp))
+                Text("Save Look")
+            }
+            Button(
+                onClick = {
+                    Toast.makeText(context, "${product.name} added to cart", Toast.LENGTH_SHORT).show()
+                    onAddToCart()
+                },
+                modifier = Modifier.weight(1f).height(52.dp), shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryDark)
+            ) {
+                Icon(Icons.Default.ShoppingBag, contentDescription = null)
+                Spacer(Modifier.width(6.dp))
+                Text("Add to Cart")
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------
+//  5. Compare looks + Try Another Color
+// ---------------------------------------------------------------------
+
+@Composable
+fun CompareScreen(photo: Bitmap, look: Bitmap, product: Product, colorName: String?, onColor: (String?, Color?) -> Unit, onBack: () -> Unit) {
+    val context = LocalContext.current
+    Column(Modifier.fillMaxSize().padding(16.dp)) {
+        TopBar("Compare Looks", onBack) {
+            IconButton(onClick = { shareLook(context, look) }) { Icon(Icons.Default.Share, contentDescription = "Share", tint = Ink) }
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(photo to "Original Photo", look to "With ${product.name.substringAfterLast(" ")}").forEach { (bmp, label) ->
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Image(
+                        bmp.asImageBitmap(), contentDescription = label, contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxWidth().aspectRatio(0.75f).clip(RoundedCornerShape(16.dp))
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(label, color = Ink, fontSize = 13.sp)
+                }
+            }
+        }
+        Spacer(Modifier.height(20.dp))
+        Text(
+            "Try Another Color", color = Primary, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(PrimaryLight).padding(12.dp)
+        )
+        Spacer(Modifier.height(16.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+            ColorDot(product.color, selected = colorName == null) { if (colorName != null) onColor(null, null) }
+            tryColors.forEach { (name, c) -> ColorDot(c, selected = colorName == name) { if (colorName != name) onColor(name, c) } }
+        }
+        Spacer(Modifier.height(8.dp))
+        Text("First circle = original colour", color = Muted, fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+    }
+}
+
+@Composable
+fun ColorDot(color: Color, selected: Boolean, onClick: () -> Unit) {
+    Box(
+        Modifier.size(44.dp).clip(CircleShape).border(2.dp, if (selected) Primary else Color.Transparent, CircleShape)
+            .padding(4.dp).clip(CircleShape).background(color).clickable { onClick() }
+    )
+}
