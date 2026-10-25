@@ -562,3 +562,55 @@ fun ColorDot(color: Color, selected: Boolean, onClick: () -> Unit) {
             .padding(4.dp).clip(CircleShape).background(color).clickable { onClick() }
     )
 }
+
+// ---------------------------------------------------------------------
+//  Rendering, saving and sharing the look
+// ---------------------------------------------------------------------
+
+/** Person photo + garment warped onto the body (optionally recoloured). */
+fun renderLook(context: Context, photo: Bitmap, body: Body, product: Product, tint: Color?): Bitmap {
+    val out = photo.copy(Bitmap.Config.ARGB_8888, true)
+    val garment = BitmapFactory.decodeResource(context.resources, product.image)
+    drawGarmentMesh(android.graphics.Canvas(out), garment, product, body, tint = tint)
+    return out
+}
+
+/** Saves a picture into Pictures/TryVerse on the phone. Returns its Uri, or null if it failed. */
+fun saveToGallery(context: Context, bitmap: Bitmap): Uri? {
+    val name = "TryVerse_${System.currentTimeMillis()}.jpg"
+    return try {
+        if (Build.VERSION.SDK_INT >= 29) {
+            val values = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, name)
+                put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/TryVerse")
+            }
+            val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values) ?: return null
+            context.contentResolver.openOutputStream(uri)?.use { bitmap.compress(Bitmap.CompressFormat.JPEG, 92, it) }
+            uri
+        } else {
+            val file = File(context.getExternalFilesDir(Environment.DIRECTORY_PICTURES), name)
+            file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 92, it) }
+            Uri.fromFile(file)
+        }
+    } catch (e: Exception) {
+        null
+    }
+}
+
+/** Saves the look and opens the phone's share menu. */
+fun shareLook(context: Context, bitmap: Bitmap) {
+    val uri = saveToGallery(context, bitmap)
+    if (uri == null || Build.VERSION.SDK_INT < 29) {
+        Toast.makeText(context, if (uri != null) "Saved to your phone" else "Could not share", Toast.LENGTH_SHORT).show()
+        return
+    }
+    val send = Intent(Intent.ACTION_SEND).apply {
+        type = "image/jpeg"
+        putExtra(Intent.EXTRA_STREAM, uri)
+        putExtra(Intent.EXTRA_TEXT, "My new look on TryVerse ✨")
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    context.startActivity(Intent.createChooser(send, "Share your look"))
+}
+
