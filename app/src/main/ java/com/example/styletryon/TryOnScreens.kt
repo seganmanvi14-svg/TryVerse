@@ -501,10 +501,7 @@ fun ResultScreen(
                 Text("Save Look")
             }
             Button(
-                onClick = {
-                    Toast.makeText(context, "${product.name} added to cart", Toast.LENGTH_SHORT).show()
-                    onAddToCart()
-                },
+                onClick = onAddToCart,           // MainActivity checks the stock and shows the message
                 modifier = Modifier.weight(1f).height(52.dp), shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryDark)
             ) {
