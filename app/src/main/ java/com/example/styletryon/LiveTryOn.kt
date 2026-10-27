@@ -287,3 +287,109 @@ fun LabeledCircleButton(icon: ImageVector, label: String, onClick: () -> Unit) {
         Text(label, color = Color.White, fontSize = 11.sp)
     }
 }
+
+// ---------------------------------------------------------------------
+//  Camera + body detection
+// ---------------------------------------------------------------------
+
+/**
+ * Body found in one camera image, in that image's pixels.
+ * toScreen() converts it to screen pixels the same way the preview is shown
+ * (scaled to fill the view, centred, and mirrored for the front camera).
+ */
+data class PoseFrame(val body: Body, val imageWidth: Float, val imageHeight: Float, val mirror: Boolean) {
+    fun toScreen(viewWidth: Float, viewHeight: Float): Body {
+        val scale = maxOf(viewWidth / imageWidth, viewHeight / imageHeight)
+        val dx = (viewWidth - imageWidth * scale) / 2f
+        val dy = (viewHeight - imageHeight * scale) / 2f
+        fun map(p: Offset?): Offset? {
+            if (p == null) return null
+            val x = p.x * scale + dx
+            return Offset(if (mirror) viewWidth - x else x, p.y * scale + dy)
+        }
+        return Body(
+            map(body.shoulderA)!!, map(body.shoulderB)!!,
+            map(body.hipA), map(body.hipB),
+            map(body.ankleA), map(body.ankleB),
+            map(body.elbowA), map(body.elbowB),
+            map(body.wristA), map(body.wristB),
+            body.mask?.onScreen(scale, dx, dy, if (mirror) viewWidth else 0f)
+        )
+    }
+}
+
+@androidx.annotation.OptIn(ExperimentalGetImage::class)
+@Composable
+fun CameraWithPose(
+    cameraController: LifecycleCameraController,
+    previewView: PreviewView,
+    frontCamera: Boolean,
+    onFrame: (PoseFrame?) -> Unit
+) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val latestOnFrame by rememberUpdatedState(onFrame)
+    val latestFront by rememberUpdatedState(frontCamera)
+    var lastBody by remember { mutableStateOf<Body?>(null) }
+
+    DisposableEffect(lifecycleOwner) {
+        // Pose Detection = joints, Selfie Segmentation = which pixels are the person
+        val poseDetector = PoseDetection.getClient(
+            PoseDetectorOptions.Builder().setDetectorMode(PoseDetectorOptions.STREAM_MODE).build()
+        )
+        val segmenter = Segmentation.getClient(
+            SelfieSegmenterOptions.Builder().setDetectorMode(SelfieSegmenterOptions.STREAM_MODE).build()
+        )
+        // Every camera frame: find the joints, then the person's outline, then pass the body on
+        cameraController.setImageAnalysisAnalyzer(ContextCompat.getMainExecutor(context)) { imageProxy ->
+            val image = imageProxy.image
+            if (image == null) {
+                imageProxy.close()
+            } else {
+                val rotation = imageProxy.imageInfo.rotationDegrees
+                // Size of the image after it is turned upright
+                val sideways = rotation == 90 || rotation == 270
+                val w = (if (sideways) imageProxy.height else imageProxy.width).toFloat()
+                val h = (if (sideways) imageProxy.width else imageProxy.height).toFloat()
+                val input = InputImage.fromMediaImage(image, rotation)
+                poseDetector.process(input)
+                    .addOnSuccessListener { pose ->
+                        lastBody = smooth(lastBody, poseToBody(pose))
+                        val b = lastBody
+                        if (b == null) {
+                            latestOnFrame(null)
+                            imageProxy.close()
+                        } else {
+                            segmenter.process(input)
+                                .addOnSuccessListener { m ->
+                                    val values = FloatArray(m.width * m.height)
+                                    m.buffer.rewind()
+                                    m.buffer.asFloatBuffer().get(values)
+                                    latestOnFrame(PoseFrame(b.copy(mask = PersonMask(values, m.width, m.height)), w, h, latestFront))
+                                }
+                                .addOnFailureListener { latestOnFrame(PoseFrame(b, w, h, latestFront)) }
+                                .addOnCompleteListener { imageProxy.close() }
+                        }
+                    }
+                    .addOnFailureListener { imageProxy.close() }
+            }
+        }
+        previewView.controller = cameraController
+        cameraController.bindToLifecycle(lifecycleOwner)
+        onDispose {
+            cameraController.clearImageAnalysisAnalyzer()
+            cameraController.unbind()
+            poseDetector.close()
+            segmenter.close()
+        }
+    }
+
+    LaunchedEffect(frontCamera) {
+        cameraController.cameraSelector =
+            if (frontCamera) CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA
+        lastBody = null
+    }
+
+    AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
+}
+
