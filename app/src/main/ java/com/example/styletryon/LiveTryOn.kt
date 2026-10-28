@@ -5,6 +5,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
@@ -21,6 +22,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -47,6 +51,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -76,6 +81,7 @@ import kotlin.math.sin
 //     Segmentation) in each frame, so we know this person's shape and size.
 //  3. The real garment photo is fitted to that body: stretched to the measured
 //     shoulders / waist / hips, with the sleeves turned to follow the arms.
+//  4. Mix & match: a top and a bottom can be worn together as one outfit.
 // =====================================================================
 
 /** Colour filters for the camera ("Filters" tab). */
@@ -87,8 +93,49 @@ val cameraFilters = listOf(
     "Vintage" to Color(0x40A07850)
 )
 
+/** Groups for the "Looks" tab, so a top and a bottom are easy to find. */
+val lookGroups = listOf("All", "Tops", "Bottoms", "Dresses")
+
+fun inGroup(p: Product, group: String) = when (group) {
+    "Tops" -> p.type == "TOP"
+    "Bottoms" -> p.type == "PANTS"
+    "Dresses" -> p.type == "DRESS"
+    else -> true
+}
+
+/**
+ * Mix & match: a top and a bottom are worn together, a dress replaces both,
+ * and tapping something already worn takes it off. Bottoms come first in the list
+ * so they are drawn under the top.
+ */
+fun wear(outfit: List<Product>, p: Product): List<Product> = when {
+    outfit.any { it.id == p.id } -> outfit.filter { it.id != p.id }
+    p.type == "DRESS" -> listOf(p)
+    p.type == "PANTS" -> listOf(p) + outfit.filter { it.type == "TOP" }
+    else -> outfit.filter { it.type == "PANTS" } + p
+}
+
+/**
+ * heightCm   = the user's height (0 = not entered yet), needed for the size suggestion
+ * onHeight   = saves a newly entered height
+ * onMeasured = saves the measured body size to the user's profile
+ * onCaptured = adds a captured picture to the try-on history (with the garment it shows)
+ * startOutfit / startSizes = a saved outfit to wear straight away (from My Outfits)
+ * onSaveOutfit = saves the current outfit (each garment with its chosen size)
+ */
 @Composable
-fun LiveTryOnScreen(startProduct: Product, onClose: () -> Unit, onAddToCart: (Product, String) -> Unit) {
+fun LiveTryOnScreen(
+    startProduct: Product,
+    onClose: () -> Unit,
+    onAddToCart: (Product, String) -> Unit,
+    heightCm: Int = 0,
+    onHeight: (Int) -> Unit = {},
+    onMeasured: (BodySize) -> Unit = {},
+    onCaptured: (Bitmap, Int) -> Unit = { _, _ -> },
+    startOutfit: List<Product>? = null,
+    startSizes: Map<Int, String> = emptyMap(),
+    onSaveOutfit: (List<Pair<Product, String>>) -> Unit = {}
+) {
     val context = LocalContext.current
     var granted by remember {
         mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
@@ -99,17 +146,36 @@ fun LiveTryOnScreen(startProduct: Product, onClose: () -> Unit, onAddToCart: (Pr
     }
     LaunchedEffect(Unit) { if (!granted) permissionLauncher.launch(Manifest.permission.CAMERA) }
 
-    var product by remember { mutableStateOf(startProduct) }
-    var showGarment by remember { mutableStateOf(true) }
+    var outfit by remember { mutableStateOf(startOutfit?.takeIf { it.isNotEmpty() } ?: listOf(startProduct)) }   // what the person is wearing now
     var frontCamera by remember { mutableStateOf(true) }
     var torchOn by remember { mutableStateOf(false) }
     var frame by remember { mutableStateOf<PoseFrame?>(null) }   // body points in camera-image pixels
     var dragShift by remember { mutableStateOf(Offset.Zero) }     // moved with a finger (touch listener)
     var tab by remember { mutableStateOf("Looks") }
+    var group by remember { mutableStateOf("All") }
     var filter by remember { mutableStateOf(cameraFilters[0]) }
-    var chosenSize by remember(product.id) { mutableStateOf(product.sizes[2]) }
-    val sizeScale = 1f + (product.sizes.indexOf(chosenSize) - 2) * 0.05f
-    val garment = ImageBitmap.imageResource(product.image)
+
+    // Size suggestion: running average of the body measured in each camera frame
+    var height by remember { mutableIntStateOf(heightCm) }
+    var heightText by remember { mutableStateOf("") }
+    var measured by remember { mutableStateOf<BodySize?>(null) }
+    var samples by remember { mutableIntStateOf(0) }
+    val ready = measured != null && samples >= SIZE_SAMPLES
+    fun suggestionFor(p: Product): String? = if (ready) recommendedSize(p, measured!!) else null
+
+    // Chosen size of each garment (a bigger size is drawn a little wider)
+    val chosenSizes = remember { mutableStateMapOf<Int, String>().apply { putAll(startSizes) } }
+    fun sizeOf(p: Product) = chosenSizes[p.id] ?: p.defaultSize()
+    fun scaleOf(p: Product) = 1f + (p.sizes.indexOf(sizeOf(p)) - 2) * 0.05f
+
+    // Garment photos, loaded once each
+    val garments = remember { mutableMapOf<Int, Bitmap>() }
+    fun garmentOf(p: Product): Bitmap = garments.getOrPut(p.image) { BitmapFactory.decodeResource(context.resources, p.image) }
+
+    /** Draws every garment in the outfit on the body (bottom first, then the top). */
+    fun drawOutfit(canvas: android.graphics.Canvas, body: Body) {
+        outfit.forEach { p -> drawGarmentMesh(canvas, garmentOf(p), p, body, scaleOf(p), dragShift) }
+    }
 
     val cameraController = remember {
         LifecycleCameraController(context).apply { setEnabledUseCases(CameraController.IMAGE_ANALYSIS) }
@@ -121,7 +187,7 @@ fun LiveTryOnScreen(startProduct: Product, onClose: () -> Unit, onAddToCart: (Pr
         }
     }
 
-    // Capture: camera frame + garment + filter -> saved to the phone's Pictures folder
+    // Capture: camera frame + outfit + filter -> saved to the phone's Pictures folder
     fun capture() {
         val photo = previewView.bitmap?.copy(Bitmap.Config.ARGB_8888, true)
         if (photo == null) {
@@ -130,17 +196,42 @@ fun LiveTryOnScreen(startProduct: Product, onClose: () -> Unit, onAddToCart: (Pr
         }
         val canvas = android.graphics.Canvas(photo)
         val b = frame?.toScreen(photo.width.toFloat(), photo.height.toFloat())
-        if (showGarment && b != null) drawGarmentMesh(canvas, garment.asAndroidBitmap(), product, b, sizeScale, dragShift)
+        if (b != null) drawOutfit(canvas, b)
         if (filter.second != Color.Transparent) canvas.drawColor(filter.second.toArgb())
         val saved = saveToGallery(context, photo) != null
-        Toast.makeText(context, if (saved) "Look saved to Pictures/TryVerse" else "Could not save photo", Toast.LENGTH_SHORT).show()
+        onCaptured(photo, outfit.lastOrNull()?.id ?: 0)          // also kept in Try-On History
+        Toast.makeText(context, if (saved) "Look saved to Pictures/TryVerse and your history" else "Could not save photo", Toast.LENGTH_SHORT).show()
+    }
+
+    // Adds every garment in the outfit to the cart (skipping sizes that are out of stock)
+    fun addOutfit() {
+        if (outfit.isEmpty()) {
+            Toast.makeText(context, "Pick something to wear first", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val (ok, soldOut) = outfit.partition { it.hasSize(sizeOf(it)) }
+        ok.forEach { onAddToCart(it, sizeOf(it)) }
+        val message = when {
+            ok.isEmpty() -> "Sorry, this is out of stock"
+            soldOut.isEmpty() -> "Added to cart: " + ok.joinToString(" + ") { "${it.name} (${sizeOf(it)})" }
+            else -> "Added ${ok.size} item(s). Out of stock: " + soldOut.joinToString { it.name }
+        }
+        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
     }
 
     Column(Modifier.fillMaxSize().background(Color.Black)) {
         // ---------------- Camera area ----------------
         Box(Modifier.weight(1f).fillMaxWidth()) {
             if (granted) {
-                CameraWithPose(cameraController, previewView, frontCamera, onFrame = { frame = it })
+                CameraWithPose(cameraController, previewView, frontCamera, onFrame = { f ->
+                    frame = f
+                    // Measure the body in this frame (only once the height is known and the whole body is visible)
+                    val m = if (f != null && height > 0) measureBody(f.body, height) else null
+                    if (m != null) {
+                        measured = averageSize(measured, m)
+                        samples++
+                    }
+                })
                 // Garment layer; drag with a finger to fine-tune its position
                 Canvas(
                     Modifier.fillMaxSize().pointerInput(Unit) {
@@ -151,14 +242,12 @@ fun LiveTryOnScreen(startProduct: Product, onClose: () -> Unit, onAddToCart: (Pr
                     }
                 ) {
                     val b = frame?.toScreen(size.width, size.height)      // camera pixels -> screen pixels
-                    if (showGarment && b != null) {
-                        drawIntoCanvas { drawGarmentMesh(it.nativeCanvas, garment.asAndroidBitmap(), product, b, sizeScale, dragShift) }
-                    }
+                    if (b != null) drawIntoCanvas { drawOutfit(it.nativeCanvas, b) }
                     drawRect(filter.second)
                 }
             } else {
                 // No camera permission: show the demo model instead
-                DemoModelTryOn(if (showGarment) product else null, Modifier.fillMaxSize())
+                DemoModelTryOn(outfit.lastOrNull(), Modifier.fillMaxSize(), under = if (outfit.size > 1) outfit.first() else null)
             }
 
             // Top bar: close, LIVE TRY-ON, flash
@@ -185,25 +274,30 @@ fun LiveTryOnScreen(startProduct: Product, onClose: () -> Unit, onAddToCart: (Pr
 
             // Hint when nobody is detected
             if (granted && frame == null) {
+                val wholeBody = outfit.any { it.type != "TOP" }
                 Text(
-                    "Step back: show your head to hips",
+                    if (wholeBody) "Step back: show your head to feet" else "Step back: show your head to hips",
                     Modifier.align(Alignment.TopCenter).padding(top = 72.dp).clip(RoundedCornerShape(20.dp))
                         .background(Color.Black.copy(alpha = .5f)).padding(horizontal = 12.dp, vertical = 6.dp),
                     color = Color.White, fontSize = 12.sp
                 )
             }
 
-            // Right side: Switch camera, Remove garment, Add to cart
+            // Right side: Switch camera, Remove outfit, Add outfit to cart
             Column(
                 Modifier.align(Alignment.CenterEnd).padding(end = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 LabeledCircleButton(Icons.Default.Cameraswitch, "Switch") { frontCamera = !frontCamera; frame = null }
-                LabeledCircleButton(Icons.Default.Delete, "Remove") { showGarment = false }
-                LabeledCircleButton(Icons.Default.ShoppingBag, "Add") {
-                    onAddToCart(product, chosenSize)
-                    Toast.makeText(context, "Added to cart: ${product.name} ($chosenSize)", Toast.LENGTH_SHORT).show()
+                LabeledCircleButton(Icons.Default.Delete, "Remove") { outfit = emptyList() }
+                LabeledCircleButton(Icons.Default.ShoppingBag, "Add") { addOutfit() }
+                LabeledCircleButton(Icons.Default.BookmarkAdd, "Save") {
+                    if (outfit.isEmpty()) Toast.makeText(context, "Pick something to wear first", Toast.LENGTH_SHORT).show()
+                    else {
+                        onSaveOutfit(outfit.map { it to sizeOf(it) })
+                        Toast.makeText(context, "Outfit saved to My Outfits", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
 
@@ -223,19 +317,36 @@ fun LiveTryOnScreen(startProduct: Product, onClose: () -> Unit, onAddToCart: (Pr
                 .padding(horizontal = 14.dp, vertical = 12.dp)
         ) {
             when (tab) {
-                "Looks" -> LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    items(catalog) { p ->
-                        val selected = p.id == product.id && showGarment
-                        Column(
-                            Modifier.width(72.dp).clickable { product = p; showGarment = true; dragShift = Offset.Zero },
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            ProductImage(
-                                p,
-                                Modifier.size(72.dp, 80.dp).border(2.dp, if (selected) Primary else Color.Transparent, RoundedCornerShape(16.dp)),
-                                padding = 6
-                            )
-                            Text(p.category, fontSize = 11.sp, color = if (selected) Primary else Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                "Looks" -> Column {
+                    // The outfit being worn (mix & match)
+                    Text(
+                        if (outfit.isEmpty()) "Pick a top and a bottom, or a dress"
+                        else "Outfit: " + outfit.joinToString(" + ") { it.name } + "  •  " + rupees(outfit.sumOf { it.price }),
+                        fontWeight = FontWeight.SemiBold, color = Ink, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis
+                    )
+                    if (outfit.size == 1 && outfit[0].type != "DRESS") {
+                        Text(
+                            if (outfit[0].type == "TOP") "Tip: pick a bottom to complete the outfit" else "Tip: pick a top to complete the outfit",
+                            color = Muted, fontSize = 11.sp
+                        )
+                    }
+                    Row(Modifier.padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        lookGroups.forEach { g -> FilterChip(selected = group == g, onClick = { group = g }, label = { Text(g, fontSize = 12.sp) }) }
+                    }
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        items(catalog.filter { inGroup(it, group) }) { p ->
+                            val selected = outfit.any { it.id == p.id }
+                            Column(
+                                Modifier.width(72.dp).clickable { outfit = wear(outfit, p); dragShift = Offset.Zero },
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                ProductImage(
+                                    p,
+                                    Modifier.size(72.dp, 80.dp).border(2.dp, if (selected) Primary else Color.Transparent, RoundedCornerShape(16.dp)),
+                                    padding = 6
+                                )
+                                Text(p.colorName, fontSize = 11.sp, color = if (selected) Primary else Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
                         }
                     }
                 }
@@ -245,13 +356,65 @@ fun LiveTryOnScreen(startProduct: Product, onClose: () -> Unit, onAddToCart: (Pr
                     }
                 }
                 else -> Column {
-                    Text(product.name + "  •  ₹%,d".format(product.price), fontWeight = FontWeight.SemiBold, color = Ink)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        product.sizes.forEach { s ->
-                            FilterChip(selected = chosenSize == s, onClick = { chosenSize = s }, label = { Text(s) })
+                    // ---- Size suggestion (height + camera) ----
+                    when {
+                        height == 0 -> Row(verticalAlignment = Alignment.CenterVertically) {
+                            OutlinedTextField(
+                                value = heightText, onValueChange = { heightText = it.filter { c -> c.isDigit() }.take(3) },
+                                label = { Text("Your height (cm)") }, singleLine = true, modifier = Modifier.weight(1f),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Button(onClick = {
+                                val cm = heightText.toIntOrNull() ?: 0
+                                if (Validate.height(cm)) {
+                                    height = cm
+                                    onHeight(cm)
+                                } else Toast.makeText(context, "Enter a height between 120 and 220 cm", Toast.LENGTH_SHORT).show()
+                            }) { Text("Save") }
+                        }
+                        !ready -> Column {
+                            Text("Finding your size... stand 2–3 m back so your whole body (head to feet) is in view", color = Ink, fontSize = 12.sp)
+                            LinearProgressIndicator(
+                                progress = { samples / SIZE_SAMPLES.toFloat() },
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), color = Primary, trackColor = PrimaryLight
+                            )
+                        }
+                        else -> {
+                            val m = measured!!
+                            Text(
+                                "Suggested for you: top " + topSizeFor(m.shoulderCm) + "  •  waist " + waistSizeFor(m.hipCm),
+                                fontWeight = FontWeight.Bold, color = Primary
+                            )
+                            Text(
+                                "Estimate from your height ($height cm): shoulders ≈ ${m.shoulderCm.toInt()} cm, hips ≈ ${m.hipCm.toInt()} cm",
+                                color = Muted, fontSize = 11.sp
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                TextButton(onClick = {
+                                    outfit.forEach { p -> suggestionFor(p)?.takeIf { p.hasSize(it) }?.let { chosenSizes[p.id] = it } }
+                                }) { Text("Use these sizes") }
+                                TextButton(onClick = {
+                                    onMeasured(m)
+                                    Toast.makeText(context, "Saved to your profile", Toast.LENGTH_SHORT).show()
+                                }) { Text("Save to profile") }
+                                TextButton(onClick = { height = 0; heightText = ""; measured = null; samples = 0 }) { Text("Change height") }
+                            }
                         }
                     }
-                    Text("Tip: drag the garment with your finger to adjust it", color = Muted, fontSize = 11.sp)
+                    if (outfit.isEmpty()) Text("Pick something in Looks first", color = Muted)
+                    // One row of sizes for each garment in the outfit (★ = suggested size)
+                    outfit.forEach { p ->
+                        Text(p.name + "  •  " + rupees(p.price), fontWeight = FontWeight.SemiBold, color = Ink, fontSize = 13.sp)
+                        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            p.sizes.forEach { s ->
+                                FilterChip(
+                                    selected = sizeOf(p) == s, onClick = { chosenSizes[p.id] = s },
+                                    enabled = p.hasSize(s), label = { Text(if (suggestionFor(p) == s) "$s ★" else s) }
+                                )
+                            }
+                        }
+                    }
                 }
             }
             Spacer(Modifier.height(10.dp))
