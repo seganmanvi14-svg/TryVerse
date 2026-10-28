@@ -102,13 +102,19 @@ fun SplashScreen(onStart: () -> Unit) {
 //  Sign Up (saved in SQLite)
 // ---------------------------------------------------------------------
 
+/** Text box used on Sign Up / Login. [error] is shown in red under the box. */
 @Composable
-fun AuthField(value: String, onChange: (String) -> Unit, hint: String, icon: ImageVector, keyboard: KeyboardType = KeyboardType.Text, password: Boolean = false) {
+fun AuthField(
+    value: String, onChange: (String) -> Unit, hint: String, icon: ImageVector,
+    keyboard: KeyboardType = KeyboardType.Text, password: Boolean = false, error: String? = null
+) {
     var visible by remember { mutableStateOf(false) }
     OutlinedTextField(
         value = value, onValueChange = onChange,
         modifier = Modifier.fillMaxWidth(),
         placeholder = { Text(hint) },
+        isError = error != null,
+        supportingText = if (error != null) { { Text(error) } } else null,
         leadingIcon = { Icon(icon, contentDescription = null, tint = Ink) },
         trailingIcon = if (password) {
             { IconButton(onClick = { visible = !visible }) { Icon(if (visible) Icons.Default.VisibilityOff else Icons.Default.Visibility, contentDescription = "Show password") } }
@@ -123,6 +129,10 @@ fun AuthField(value: String, onChange: (String) -> Unit, hint: String, icon: Ima
     )
 }
 
+/**
+ * Sign Up form with validation: each box shows its own error in red as soon as the
+ * user starts typing (or presses Sign Up), and the button only works when all are valid.
+ */
 @Composable
 fun SignUpScreen(db: UserDatabase, onSignedUp: (User) -> Unit, onLogin: () -> Unit) {
     val context = LocalContext.current
@@ -130,35 +140,78 @@ fun SignUpScreen(db: UserDatabase, onSignedUp: (User) -> Unit, onLogin: () -> Un
     var email by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var confirm by remember { mutableStateOf("") }
+    var agreed by remember { mutableStateOf(false) }
+    var submitted by remember { mutableStateOf(false) }      // show all errors after Sign Up is pressed
+    var takenEmail by remember { mutableStateOf("") }        // email found already registered
+
+    // Error for each field (null = OK). Shown once the field has text, or after Sign Up is pressed.
+    fun show(value: String) = submitted || value.isNotEmpty()
+    val nameError = when {
+        !show(name) -> null
+        name.isBlank() -> "Please enter your name"
+        !Validate.name(name) -> "Use 2–40 letters only (no numbers or symbols)"
+        else -> null
+    }
+    val emailError = when {
+        !show(email) -> null
+        email.isBlank() -> "Please enter your email"
+        !Validate.email(email) -> "Enter a valid email, e.g. name@gmail.com"
+        email.lowercase() == takenEmail -> "This email is already registered. Please log in."
+        else -> null
+    }
+    val phoneError = when {
+        !show(phone) -> null
+        phone.isBlank() -> "Please enter your mobile number"
+        !Validate.phone(phone) -> "Enter a valid 10-digit mobile number"
+        else -> null
+    }
+    val passwordError = when {
+        !show(password) -> null
+        password.length < 8 -> "At least 8 characters"
+        password.none { it.isLetter() } -> "Add at least one letter"
+        password.none { it.isDigit() } -> "Add at least one number"
+        else -> null
+    }
+    val confirmError = when {
+        !show(confirm) -> null
+        confirm != password -> "Passwords do not match"
+        else -> null
+    }
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(16.dp))
         Logo(46.sp)
         Text("Create your account\nto start shopping", color = Muted, textAlign = TextAlign.Center)
-        Spacer(Modifier.height(8.dp))
-        AuthField(name, { name = it.take(40) }, "Full name", Icons.Default.PersonOutline)
-        AuthField(email, { email = it.trim().take(120) }, "Email", Icons.Default.MailOutline, KeyboardType.Email)
-        AuthField(phone, { phone = it.take(16) }, "Phone number", Icons.Default.PhoneAndroid, KeyboardType.Phone)
-        AuthField(password, { password = it.take(64) }, "Password", Icons.Default.Lock, KeyboardType.Password, password = true)
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(6.dp))
+        AuthField(name, { name = it.take(40) }, "Full name", Icons.Default.PersonOutline, error = nameError)
+        AuthField(email, { email = it.trim().take(120) }, "Email", Icons.Default.MailOutline, KeyboardType.Email, error = emailError)
+        AuthField(phone, { phone = it.take(16) }, "Mobile number (10 digits)", Icons.Default.PhoneAndroid, KeyboardType.Phone, error = phoneError)
+        AuthField(password, { password = it.take(64) }, "Password", Icons.Default.Lock, KeyboardType.Password, password = true, error = passwordError)
+        if (password.isNotEmpty()) PasswordStrength(password)
+        AuthField(confirm, { confirm = it.take(64) }, "Confirm password", Icons.Default.Lock, KeyboardType.Password, password = true, error = confirmError)
+        Row(Modifier.fillMaxWidth().clickable { agreed = !agreed }, verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(checked = agreed, onCheckedChange = { agreed = it })
+            Text(
+                "I agree to the Terms of Use and Privacy Policy", fontSize = 13.sp,
+                color = if (submitted && !agreed) MaterialTheme.colorScheme.error else Ink
+            )
+        }
         PrimaryButton("Sign Up", Modifier.fillMaxWidth()) {
+            submitted = true
+            val allValid = Validate.name(name) && Validate.email(email) && Validate.phone(phone) &&
+                Validate.password(password) && confirm == password
             when {
-                name.isBlank() || email.isBlank() || phone.isBlank() || password.isBlank() ->
-                    Toast.makeText(context, "Please fill in all fields", Toast.LENGTH_SHORT).show()
-                !Validate.name(name) -> Toast.makeText(context, "Name must be 2–40 characters", Toast.LENGTH_SHORT).show()
-                !Validate.email(email) -> Toast.makeText(context, "Enter a valid email", Toast.LENGTH_SHORT).show()
-                !Validate.phone(phone.trim()) -> Toast.makeText(context, "Enter a valid phone number", Toast.LENGTH_SHORT).show()
-                !Validate.password(password) ->
-                    Toast.makeText(context, "Password: 8+ characters with a letter and a number", Toast.LENGTH_LONG).show()
-                !db.addUser(name.trim(), email, phone.trim(), password) ->
-                    Toast.makeText(context, "This email is already registered. Please log in.", Toast.LENGTH_SHORT).show()
+                !allValid -> Toast.makeText(context, "Please fix the fields in red", Toast.LENGTH_SHORT).show()
+                !agreed -> Toast.makeText(context, "Please accept the Terms to continue", Toast.LENGTH_SHORT).show()
+                !db.addUser(name.trim(), email, phone.trim(), password) -> takenEmail = email.lowercase()
                 else -> {
                     Toast.makeText(context, "Welcome to TryVerse, ${name.trim()}!", Toast.LENGTH_SHORT).show()
-                    onSignedUp(User(name.trim(), email.lowercase(), phone.trim()))
+                    onSignedUp(db.getUser(email) ?: User(name.trim(), email.lowercase(), phone.trim()))
                 }
             }
         }
@@ -167,6 +220,25 @@ fun SignUpScreen(db: UserDatabase, onSignedUp: (User) -> Unit, onLogin: () -> Un
             Text("Already have an account? ", color = Muted)
             Text("Login", color = Primary, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { onLogin() })
         }
+    }
+}
+
+/** Bar under the password box: Weak / Fair / Good / Strong. */
+@Composable
+fun PasswordStrength(password: String) {
+    val score = Validate.strength(password)
+    val (label, colour) = when (score) {
+        0, 1 -> "Weak" to Rose
+        2 -> "Fair" to Color(0xFFE0922F)
+        3 -> "Good" to Primary
+        else -> "Strong" to Color(0xFF2E8B57)
+    }
+    Column(Modifier.fillMaxWidth()) {
+        LinearProgressIndicator(
+            progress = { score / 4f }, color = colour, trackColor = Color(0xFFE6E6F0),
+            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp))
+        )
+        Text("Password strength: $label  (use upper & lower case and a symbol to make it stronger)", fontSize = 11.sp, color = Muted)
     }
 }
 
@@ -203,6 +275,7 @@ fun LoginScreen(db: UserDatabase, onLoggedIn: (User) -> Unit, onSignUp: () -> Un
     var password by remember { mutableStateOf("") }
     var failedAttempts by rememberSaveable { mutableIntStateOf(0) }
     var lockedUntil by rememberSaveable { mutableLongStateOf(0L) }
+    var forgot by remember { mutableStateOf(false) }
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
@@ -215,7 +288,10 @@ fun LoginScreen(db: UserDatabase, onLoggedIn: (User) -> Unit, onSignUp: () -> Un
         Spacer(Modifier.height(8.dp))
         AuthField(email, { email = it.trim().take(120) }, "Email", Icons.Default.MailOutline, KeyboardType.Email)
         AuthField(password, { password = it.take(64) }, "Password", Icons.Default.Lock, KeyboardType.Password, password = true)
-        Spacer(Modifier.height(4.dp))
+        Text(
+            "Forgot password?", color = Primary, fontSize = 13.sp,
+            modifier = Modifier.align(Alignment.End).clickable { forgot = true }
+        )
         PrimaryButton("Login", Modifier.fillMaxWidth()) {
             val now = System.currentTimeMillis()
             if (now < lockedUntil) {
@@ -244,4 +320,66 @@ fun LoginScreen(db: UserDatabase, onLoggedIn: (User) -> Unit, onSignUp: () -> Un
             Text("Sign Up", color = Primary, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { onSignUp() })
         }
     }
+
+    if (forgot) ForgotPasswordDialog(db, startEmail = email, onDone = { forgot = false })
+}
+
+/**
+ * Forgot password: the user proves it is their account with the email + mobile number
+ * used at sign up, then sets a new password (checked like on Sign Up).
+ */
+@Composable
+fun ForgotPasswordDialog(db: UserDatabase, startEmail: String, onDone: () -> Unit) {
+    val context = LocalContext.current
+    var email by remember { mutableStateOf(startEmail) }
+    var phone by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var confirm by remember { mutableStateOf("") }
+    var tried by remember { mutableStateOf(false) }
+    var wrongTries by remember { mutableIntStateOf(0) }
+    var noMatch by remember { mutableStateOf(false) }
+
+    fun show(value: String) = tried || value.isNotEmpty()
+    val emailError = if (show(email) && !Validate.email(email)) "Enter a valid email" else null
+    val phoneError = when {
+        show(phone) && !Validate.phone(phone) -> "Enter your 10-digit mobile number"
+        noMatch -> "Email and mobile number don't match any account"
+        else -> null
+    }
+    val passwordError = if (show(password) && !Validate.password(password)) "8+ characters with a letter and a number" else null
+    val confirmError = if (show(confirm) && confirm != password) "Passwords do not match" else null
+
+    AlertDialog(
+        onDismissRequest = onDone,
+        title = { Text("Reset Password") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Enter the email and mobile number you signed up with.", color = Muted, fontSize = 13.sp)
+                AuthField(email, { email = it.trim().take(120); noMatch = false }, "Email", Icons.Default.MailOutline, KeyboardType.Email, error = emailError)
+                AuthField(phone, { phone = it.take(16); noMatch = false }, "Mobile number", Icons.Default.PhoneAndroid, KeyboardType.Phone, error = phoneError)
+                AuthField(password, { password = it.take(64) }, "New password", Icons.Default.Lock, KeyboardType.Password, password = true, error = passwordError)
+                if (password.isNotEmpty()) PasswordStrength(password)
+                AuthField(confirm, { confirm = it.take(64) }, "Confirm new password", Icons.Default.Lock, KeyboardType.Password, password = true, error = confirmError)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                tried = true
+                if (wrongTries >= 5) {
+                    Toast.makeText(context, "Too many attempts. Please try again later.", Toast.LENGTH_LONG).show()
+                    onDone()
+                    return@TextButton
+                }
+                if (!Validate.email(email) || !Validate.phone(phone) || !Validate.password(password) || confirm != password) return@TextButton
+                if (db.resetPassword(email, phone, password)) {
+                    Toast.makeText(context, "Password reset. Please log in with your new password.", Toast.LENGTH_LONG).show()
+                    onDone()
+                } else {
+                    wrongTries++
+                    noMatch = true
+                }
+            }) { Text("Reset") }
+        },
+        dismissButton = { TextButton(onClick = onDone) { Text("Cancel") } }
+    )
 }
