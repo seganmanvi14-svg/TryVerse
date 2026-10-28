@@ -23,6 +23,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -31,6 +32,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import kotlinx.coroutines.launch
@@ -98,92 +100,92 @@ fun TryOnUploadScreen(product: Product, onProduct: (Product) -> Unit, onBack: ()
     }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
-        TopBar("Try-On", onBack)
-        Text("See how it looks on you!", color = Muted, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-        Spacer(Modifier.height(12.dp))
+        TopBar("Virtual Try-On", onBack)
+        Row(verticalAlignment = Alignment.Bottom) {
+            DisplayTitle("See it ", size = 32.sp)
+            ScriptWord("on you", size = 38.sp)
+        }
+        Text("Live with your camera, or with a photo of you.", color = Muted, fontSize = 13.sp, fontWeight = FontWeight.Normal)
+        Spacer(Modifier.height(16.dp))
 
-        // Option 1: live camera
+        // Option 1: live camera (solid block in the main colour)
         Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
-                .background(Brush.horizontalGradient(listOf(Color(0xFF8A6FE0), Primary)))
-                .clickable { onLive() }.padding(16.dp),
+            Modifier.fillMaxWidth().glass(CardShape).clickable { onLive() }.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Default.Videocam, contentDescription = null, tint = Color.White, modifier = Modifier.size(36.dp))
-            Spacer(Modifier.width(12.dp))
+            // Champagne ring camera icon (same as the bottom bar's Try-On button)
+            Box(
+                Modifier.size(52.dp).clip(CircleShape).border(1.5.dp, Gold, CircleShape).background(Sand),
+                contentAlignment = Alignment.Center
+            ) { Icon(Icons.Rounded.Videocam, contentDescription = null, tint = Gold, modifier = Modifier.size(24.dp)) }
+            Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text("Live Camera Try-On", color = Color.White, fontWeight = FontWeight.Bold)
-                Text("See the outfit on you in real time", color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp)
+                Text("Live Camera Try-On", color = Ink, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text("See the outfit on you in real time", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Normal)
             }
-            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color.White)
+            Icon(Icons.Rounded.ChevronRight, contentDescription = null, tint = Primary)
         }
-        Spacer(Modifier.height(14.dp))
-        Text("AI Photo Try-On", fontWeight = FontWeight.Bold, color = Ink, fontSize = 16.sp)
+        Spacer(Modifier.height(22.dp))
+        Eyebrow("AI photo try-on")
         Text("Upload a photo and our AI creates a picture of you wearing it", color = Muted, fontSize = 12.sp)
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(14.dp))
 
         // Which outfit to try
-        Text("Outfit: ${product.name}", fontWeight = FontWeight.SemiBold, color = Ink, fontSize = 14.sp)
-        Spacer(Modifier.height(6.dp))
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Eyebrow("Outfit: ${product.name}", color = Muted)
+        Spacer(Modifier.height(8.dp))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             items(catalog) { p ->
                 ProductImage(
                     p,
-                    Modifier.size(54.dp, 64.dp).border(2.dp, if (p.id == product.id) Primary else Color.Transparent, RoundedCornerShape(16.dp))
+                    Modifier.size(56.dp, 74.dp).border(1.5.dp, if (p.id == product.id) Gold else Color.Transparent, Sharp)
                         .clickable { onProduct(p) },
                     padding = 5
                 )
             }
         }
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(16.dp))
 
-        // Dashed upload box
+        // Dashed upload box (square corners)
         Column(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(SoftBlue)
+            Modifier.fillMaxWidth().clip(CardShape).background(GlassFill)
                 .drawBehind {
                     drawRoundRect(
-                        color = Primary.copy(alpha = 0.6f), cornerRadius = CornerRadius(20.dp.toPx()),
-                        style = Stroke(width = 2.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(18f, 12f)))
+                        color = Gold.copy(alpha = 0.5f), cornerRadius = CornerRadius(22.dp.toPx()),
+                        style = Stroke(width = 1.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(14f, 10f)))
                     )
                 }
-                .padding(vertical = 28.dp),
+                .padding(vertical = 30.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Icon(Icons.Default.AddAPhoto, contentDescription = null, tint = Primary, modifier = Modifier.size(44.dp))
+            Icon(Icons.Rounded.AddAPhoto, contentDescription = null, tint = Primary, modifier = Modifier.size(40.dp))
             Spacer(Modifier.height(10.dp))
-            Text("Upload Your Photo", fontWeight = FontWeight.Bold, color = Ink)
-            Text("(Front-facing, full or half body)", color = Muted, fontSize = 12.sp)
+            Eyebrow("Upload your photo")
+            Text("Front-facing, full or half body", color = Muted, fontSize = 12.sp)
             Spacer(Modifier.height(14.dp))
-            Button(
-                onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-                shape = RoundedCornerShape(24.dp)
-            ) { Text("Choose Photo", modifier = Modifier.padding(horizontal = 12.dp)) }
+            ZaraButton("Choose photo") { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
         }
 
         // Sample models
-        Spacer(Modifier.height(16.dp))
-        Text("Or try a sample model", color = Ink, fontSize = 14.sp)
+        Spacer(Modifier.height(20.dp))
+        Eyebrow("Or try a sample model")
         Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             sampleModels.forEach { id ->
                 Image(
                     painterResource(id), contentDescription = "Sample model", contentScale = ContentScale.Crop,
-                    modifier = Modifier.weight(1f).aspectRatio(0.8f).clip(RoundedCornerShape(14.dp))
+                    modifier = Modifier.weight(1f).aspectRatio(0.75f).goldFrame()
                         .clickable { onPhoto(BitmapFactory.decodeResource(context.resources, id)) }
                 )
             }
         }
 
         // Tips
-        Spacer(Modifier.height(16.dp))
-        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(SoftBlue).padding(14.dp)) {
-            Icon(Icons.Default.Lightbulb, contentDescription = null, tint = Star)
-            Spacer(Modifier.width(10.dp))
-            Column {
-                Text("Best Results:", fontWeight = FontWeight.Bold, color = Ink, fontSize = 13.sp)
-                listOf("Use a clear, front-facing photo", "Show your head to hips (feet for pants)", "Good lighting", "Wear fitted clothes")
-                    .forEach { Text("•  $it", color = Ink, fontSize = 12.sp) }
-            }
+        Spacer(Modifier.height(20.dp))
+        Column(Modifier.fillMaxWidth().border(1.dp, Line, Sharp).padding(14.dp)) {
+            Eyebrow("For the best results")
+            Spacer(Modifier.height(6.dp))
+            listOf("Use a clear, front-facing photo", "Show your head to hips (feet for pants)", "Good lighting", "Wear fitted clothes")
+                .forEach { Text("—  $it", color = Ink, fontSize = 12.sp) }
         }
     }
 }
@@ -223,7 +225,7 @@ fun AdjustPhotoScreen(photo: Bitmap, onRetake: () -> Unit, onContinue: (Bitmap) 
 
         Box(
             Modifier.weight(1f).aspectRatio(0.75f).align(Alignment.CenterHorizontally)
-                .clip(RoundedCornerShape(18.dp)).background(Color.White)
+                .background(Sand)
                 .onSizeChanged { frame = it }
                 .pointerInput(Unit) {          // touch listener: drag and pinch
                     detectTransformGestures { _, move, zoomChange, _ ->
@@ -265,18 +267,10 @@ fun AdjustPhotoScreen(photo: Bitmap, onRetake: () -> Unit, onContinue: (Bitmap) 
             Icon(Icons.Default.ZoomIn, contentDescription = null, tint = Ink)
         }
         Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(
-                onClick = onRetake, modifier = Modifier.weight(1f).height(52.dp), shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryLight, contentColor = Primary)
-            ) { Text("Retake") }
-            Button(
-                onClick = { if (frame.width > 0) onContinue(cropPhoto(photo, frame.width.toFloat(), frame.height.toFloat(), zoom, pan)) },
-                modifier = Modifier.weight(2f).height(52.dp), shape = RoundedCornerShape(16.dp)
-            ) {
-                Text("Continue")
-                Spacer(Modifier.width(6.dp))
-                Icon(Icons.Default.ArrowForward, contentDescription = null)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ZaraOutlinedButton("Retake", Modifier.weight(1f), onClick = onRetake)
+            ZaraButton("Continue", Modifier.weight(2f)) {
+                if (frame.width > 0) onContinue(cropPhoto(photo, frame.width.toFloat(), frame.height.toFloat(), zoom, pan))
             }
         }
     }
@@ -359,16 +353,17 @@ fun ProcessingScreen(base: Bitmap, person: Bitmap, product: Product, colorName: 
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Box(Modifier.size(110.dp).clip(CircleShape).background(PrimaryLight), contentAlignment = Alignment.Center) {
-            Icon(Icons.Default.AutoFixHigh, contentDescription = null, tint = Primary, modifier = Modifier.size(50.dp))
+        Box(Modifier.size(96.dp).goldFrame().background(Sand), contentAlignment = Alignment.Center) {
+            Icon(Icons.Rounded.AutoAwesome, contentDescription = null, tint = Primary, modifier = Modifier.size(40.dp))
         }
-        Spacer(Modifier.height(20.dp))
-        Text("Trying It On...", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Ink)
-        Text("This takes about 10–20 seconds", color = Muted)
+        Spacer(Modifier.height(22.dp))
+        DisplayTitle("Trying it on…", size = 30.sp)
+        Spacer(Modifier.height(4.dp))
+        Eyebrow("About 10–20 seconds", color = Muted)
         Spacer(Modifier.height(20.dp))
         LinearProgressIndicator(
-            progress = { progress }, modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
-            color = Primary, trackColor = PrimaryLight
+            progress = { progress }, modifier = Modifier.fillMaxWidth().height(2.dp),
+            color = Primary, trackColor = Line
         )
         Spacer(Modifier.height(24.dp))
         Text("Our AI is dressing you in the ${product.name}", color = Muted, fontSize = 13.sp, modifier = Modifier.fillMaxWidth())
@@ -393,8 +388,8 @@ fun ProcessingScreen(base: Bitmap, person: Bitmap, product: Product, colorName: 
             icon = { Icon(Icons.Default.CloudOff, contentDescription = null) },
             title = { Text("AI try-on unavailable") },
             text = { Text("${aiError}\n\nWould you like a quick preview made on your phone instead?") },
-            confirmButton = { Button(onClick = { quickPreview() }) { Text("Quick Preview") } },
-            dismissButton = { TextButton(onClick = { onFail() }) { Text("Go Back") } }
+            confirmButton = { ZaraButton("Quick preview") { quickPreview() } },
+            dismissButton = { TextButton(onClick = { onFail() }) { Text("GO BACK", letterSpacing = 1.sp) } }
         )
     }
 }
@@ -443,72 +438,92 @@ fun ResultScreen(
 ) {
     val context = LocalContext.current
     val image = remember(look) { look.asImageBitmap() }
+    val save = {
+        val saved = saveToGallery(context, look) != null
+        Toast.makeText(context, if (saved) "Look saved to Pictures/TryVerse" else "Could not save", Toast.LENGTH_SHORT).show()
+    }
 
-    Column(Modifier.fillMaxSize().padding(16.dp)) {
-        TopBar("Your Try-On Result", onBack) {
-            IconButton(onClick = { shareLook(context, look) }) { Icon(Icons.Default.Share, contentDescription = "Share", tint = Ink) }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp)) {
+        TopBar("Virtual Try-On", onBack) {
+            Text("Save", color = Primary, fontSize = 14.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { save() }.padding(8.dp))
         }
-        Box(Modifier.weight(1f).aspectRatio(0.75f).align(Alignment.CenterHorizontally).clip(RoundedCornerShape(20.dp))) {
-            Image(image, contentDescription = "Your look", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-            Text(
-                if (madeByAi && AiTryOn.lastAnalysis.isNotBlank()) "✨ AI styled" else "Fitted to you",
-                Modifier.align(Alignment.TopStart).padding(12.dp).clip(RoundedCornerShape(20.dp))
-                    .background(Color.Black.copy(alpha = 0.45f)).padding(horizontal = 10.dp, vertical = 5.dp),
-                color = Color.White, fontSize = 11.sp
-            )
-            Row(
-                Modifier.align(Alignment.BottomEnd).padding(12.dp).clip(RoundedCornerShape(20.dp)).background(Color.White)
-                    .clickable { onCompare() }.padding(horizontal = 12.dp, vertical = 7.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(Icons.Default.Compare, contentDescription = null, tint = Ink, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(5.dp))
-                Text("Compare", fontSize = 12.sp, color = Ink)
+        Row(Modifier.fillMaxWidth().height(400.dp)) {
+            // The look, in a rounded frame
+            Box(Modifier.weight(1f).fillMaxHeight().clip(RoundedCornerShape(18.dp)).border(1.dp, Gold.copy(alpha = 0.3f), RoundedCornerShape(18.dp))) {
+                Image(image, contentDescription = "Your look", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                GlassChip(if (madeByAi) "AI fitted" else "Fitted to you", Modifier.align(Alignment.TopStart).padding(10.dp))
+                Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(70.dp).background(Brush.verticalGradient(listOf(Color.Transparent, Color(0x99000000)))))
+                // "Fitted" ring
+                Box(
+                    Modifier.align(Alignment.BottomEnd).padding(10.dp).size(58.dp).clip(CircleShape)
+                        .background(Brush.sweepGradient(listOf(GoldDeep, GoldLight, Gold, GoldDeep))).padding(3.dp)
+                        .clip(CircleShape).background(Color(0xD9070706)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(Icons.Rounded.Check, contentDescription = null, tint = Gold, modifier = Modifier.size(18.dp))
+                        Text("FITTED", color = Gold, fontSize = 7.sp, letterSpacing = 1.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+                // Compare
+                Row(
+                    Modifier.align(Alignment.BottomStart).padding(10.dp).clip(Pill).background(Color(0x99000000))
+                        .border(1.dp, Line, Pill).clickable { onCompare() }.padding(horizontal = 12.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Rounded.Compare, contentDescription = null, tint = Color(0xFFF4EEE2), modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.width(5.dp))
+                    Text("Compare", fontSize = 11.sp, color = Color(0xFFF4EEE2), fontWeight = FontWeight.Bold)
+                }
+            }
+            Spacer(Modifier.width(8.dp))
+            // Switch outfit (makes a new try-on)
+            LazyColumn(Modifier.width(58.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(catalog) { p ->
+                    ProductImage(
+                        p,
+                        Modifier.size(56.dp, 74.dp).border(1.5.dp, if (p.id == product.id) Gold else Color.Transparent, Sharp)
+                            .clickable { if (p.id != product.id) onProduct(p) },
+                        padding = 5
+                    )
+                }
             }
         }
-        Spacer(Modifier.height(10.dp))
-        // Switch outfit (makes a new try-on)
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(catalog) { p ->
-                ProductImage(
-                    p,
-                    Modifier.size(62.dp, 72.dp).border(2.dp, if (p.id == product.id) Primary else Color.Transparent, RoundedCornerShape(16.dp))
-                        .clickable { if (p.id != product.id) onProduct(p) },
-                    padding = 5
-                )
+        // "Looks good on you." glass card
+        Column(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 20.dp).glass(CardShape).padding(16.dp)) {
+            Row(verticalAlignment = Alignment.Bottom) {
+                DisplayTitle("Looks good ", size = 24.sp)
+                ScriptWord("on you.", size = 30.sp)
             }
-        }
-        // Gemini's style tip (only when Firebase is set up)
-        if (madeByAi && AiTryOn.lastAnalysis.isNotBlank()) {
+            Spacer(Modifier.height(10.dp))
+            Column(Modifier.fillMaxWidth().glass(RoundedCornerShape(14.dp)).padding(12.dp)) {
+                Text(if (madeByAi) "AI Style Analysis" else "Fit Analysis", color = Muted, fontSize = 11.sp)
+                Spacer(Modifier.height(6.dp))
+                if (madeByAi && AiTryOn.lastAnalysis.isNotBlank()) {
+                    Text(AiTryOn.lastAnalysis, color = Ink, fontSize = 12.sp)
+                } else {
+                    listOf("Fitted to your shoulders and hips", "Sleeves follow your arms", "Try another colour in Compare").forEach {
+                        Row(Modifier.padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Rounded.CheckCircleOutline, contentDescription = null, tint = Gold, modifier = Modifier.size(15.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(it, color = Ink, fontSize = 12.sp)
+                        }
+                    }
+                }
+                Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("Shoulders ✓", "Waist ✓", "Length ✓").forEach {
+                        Text(
+                            it, color = Gold, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.clip(Pill).border(1.dp, Gold.copy(alpha = 0.4f), Pill).padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            // MainActivity checks the stock and shows the message
+            ZaraButton("Add to Cart", Modifier.fillMaxWidth(), onClick = onAddToCart)
             Spacer(Modifier.height(8.dp))
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(PrimaryLight).padding(12.dp)) {
-                Text("✨ AI Style Analysis", fontWeight = FontWeight.Bold, color = Primary, fontSize = 13.sp)
-                Text(AiTryOn.lastAnalysis, color = Ink, fontSize = 12.sp)
-            }
-        }
-        Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(
-                onClick = {
-                    val saved = saveToGallery(context, look) != null
-                    Toast.makeText(context, if (saved) "Look saved to Pictures/TryVerse" else "Could not save", Toast.LENGTH_SHORT).show()
-                },
-                modifier = Modifier.weight(1f).height(52.dp), shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryLight, contentColor = Primary)
-            ) {
-                Icon(Icons.Default.BookmarkBorder, contentDescription = null)
-                Spacer(Modifier.width(6.dp))
-                Text("Save Look")
-            }
-            Button(
-                onClick = onAddToCart,           // MainActivity checks the stock and shows the message
-                modifier = Modifier.weight(1f).height(52.dp), shape = RoundedCornerShape(16.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryDark)
-            ) {
-                Icon(Icons.Default.ShoppingBag, contentDescription = null)
-                Spacer(Modifier.width(6.dp))
-                Text("Add to Cart")
-            }
+            ZaraOutlinedButton("Compare & Try Colours", Modifier.fillMaxWidth(), onClick = onCompare)
         }
     }
 }
@@ -525,38 +540,38 @@ fun CompareScreen(photo: Bitmap, look: Bitmap, product: Product, colorName: Stri
             IconButton(onClick = { shareLook(context, look) }) { Icon(Icons.Default.Share, contentDescription = "Share", tint = Ink) }
         }
         Spacer(Modifier.height(10.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(photo to "Original Photo", look to "With ${product.name.substringAfterLast(" ")}").forEach { (bmp, label) ->
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf(photo to "Original photo", look to "With ${product.name.substringAfterLast(" ")}").forEach { (bmp, label) ->
                 Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
                     Image(
                         bmp.asImageBitmap(), contentDescription = label, contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxWidth().aspectRatio(0.75f).clip(RoundedCornerShape(16.dp))
+                        modifier = Modifier.fillMaxWidth().aspectRatio(0.75f).goldFrame()
                     )
                     Spacer(Modifier.height(6.dp))
-                    Text(label, color = Ink, fontSize = 13.sp)
+                    Text(label.uppercase(), color = Ink, fontSize = 11.sp, letterSpacing = 1.sp)
                 }
             }
         }
         Spacer(Modifier.height(20.dp))
-        Text(
-            "Try Another Color", color = Primary, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(PrimaryLight).padding(12.dp)
-        )
+        Hairline()
+        Eyebrow("Try another colour", Modifier.fillMaxWidth().padding(vertical = 12.dp))
+        Hairline()
         Spacer(Modifier.height(16.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
             ColorDot(product.color, selected = colorName == null) { if (colorName != null) onColor(null, null) }
             tryColors.forEach { (name, c) -> ColorDot(c, selected = colorName == name) { if (colorName != name) onColor(name, c) } }
         }
         Spacer(Modifier.height(8.dp))
-        Text("First circle = original colour", color = Muted, fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        Text("First square = original colour", color = Muted, fontSize = 11.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     }
 }
 
+/** Square colour swatch (Zara shows colours as small squares). */
 @Composable
 fun ColorDot(color: Color, selected: Boolean, onClick: () -> Unit) {
     Box(
-        Modifier.size(44.dp).clip(CircleShape).border(2.dp, if (selected) Primary else Color.Transparent, CircleShape)
-            .padding(4.dp).clip(CircleShape).background(color).clickable { onClick() }
+        Modifier.size(40.dp).border(if (selected) 1.5.dp else 1.dp, if (selected) Ink else Line, Sharp)
+            .padding(4.dp).background(color).clickable { onClick() }
     )
 }
 
