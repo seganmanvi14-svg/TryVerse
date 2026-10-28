@@ -11,15 +11,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -30,10 +27,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.io.File
 
+// =====================================================================
 //  TRY-ON HISTORY
 //  Every try-on picture (AI photo try-on and live camera captures) is saved as a
 //  JPEG in the app's private folder (filesDir/looks) and listed in the SQLite
 //  "looks" table for the logged-in user. Other apps cannot read this folder.
+// =====================================================================
 
 /** Saves a look into the history. Pictures are made smaller (max 900 px) to save space. */
 fun saveLookToHistory(context: Context, db: UserDatabase, email: String, look: Bitmap, productId: Int) {
@@ -60,23 +59,24 @@ fun TryOnHistoryScreen(db: UserDatabase, email: String, onBack: () -> Unit, onPr
         TopBar("Try-On History", onBack)
         if (looks.isEmpty()) {
             Column(Modifier.fillMaxWidth().padding(top = 80.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Default.PhotoLibrary, contentDescription = null, tint = Primary, modifier = Modifier.size(56.dp))
-                Text("No try-ons yet", fontWeight = FontWeight.Bold)
+                Icon(Icons.Default.PhotoLibrary, contentDescription = null, tint = Primary, modifier = Modifier.size(44.dp))
+                Spacer(Modifier.height(10.dp))
+                DisplayTitle("No try-ons yet", size = 24.sp)
                 Text("Your AI try-ons and live camera captures will appear here.", color = Muted, textAlign = TextAlign.Center)
             }
         } else {
-            Text("${looks.size} looks", color = Muted, fontSize = 13.sp, modifier = Modifier.padding(start = 12.dp, bottom = 8.dp))
+            Text("${looks.size} LOOKS", color = Muted, fontSize = 11.sp, letterSpacing = 1.sp, modifier = Modifier.padding(start = 4.dp, bottom = 10.dp))
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 items(looks, key = { it.path }) { look ->
                     val product = productById(look.productId)
-                    Column(Modifier.clip(RoundedCornerShape(16.dp)).background(Color.White).clickable { open = look }) {
-                        LookImage(look.path, Modifier.fillMaxWidth().aspectRatio(0.75f))
-                        Column(Modifier.padding(8.dp)) {
-                            Text(product?.name ?: "My look", fontSize = 13.sp, color = Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Column(Modifier.clickable { open = look }) {
+                        LookImage(look.path, Modifier.fillMaxWidth().aspectRatio(0.75f).goldFrame())
+                        Column(Modifier.padding(horizontal = 2.dp, vertical = 8.dp)) {
+                            Text(product?.name ?: "My look", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(formatDate(look.time), fontSize = 11.sp, color = Muted)
                         }
                     }
@@ -91,13 +91,13 @@ fun TryOnHistoryScreen(db: UserDatabase, email: String, onBack: () -> Unit, onPr
         AlertDialog(
             onDismissRequest = { open = null },
             title = { Text(product?.name ?: "My look") },
-            text = { LookImage(look.path, Modifier.fillMaxWidth().aspectRatio(0.75f).clip(RoundedCornerShape(14.dp))) },
+            text = { LookImage(look.path, Modifier.fillMaxWidth().aspectRatio(0.75f)) },
             confirmButton = {
                 Row {
                     TextButton(onClick = {
                         BitmapFactory.decodeFile(look.path)?.let { shareLook(context, it) }
-                    }) { Text("Share") }
-                    if (product != null) TextButton(onClick = { open = null; onProduct(product) }) { Text("View item") }
+                    }) { Text("SHARE", letterSpacing = 1.sp) }
+                    if (product != null) TextButton(onClick = { open = null; onProduct(product) }) { Text("VIEW ITEM", letterSpacing = 1.sp) }
                 }
             },
             dismissButton = {
@@ -107,7 +107,7 @@ fun TryOnHistoryScreen(db: UserDatabase, email: String, onBack: () -> Unit, onPr
                     looks = looks.filter { it.path != look.path }
                     open = null
                     Toast.makeText(context, "Look deleted", Toast.LENGTH_SHORT).show()
-                }) { Text("Delete", color = Rose) }
+                }) { Text("DELETE", color = Rose, letterSpacing = 1.sp) }
             }
         )
     }
