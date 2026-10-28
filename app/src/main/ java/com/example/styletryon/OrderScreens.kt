@@ -6,7 +6,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -14,15 +13,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+// =====================================================================
 //  ORDER DETAILS (opened by tapping an order in My Profile)
-
+// =====================================================================
 
 /** [suggestSize] = the user's size from the body scan (shown when exchanging a size). */
 @Composable
@@ -46,8 +45,8 @@ fun OrderDetailsScreen(
         Section {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("Order #${current.id}", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = Ink)
-                    Text("Placed on ${current.date}  •  ${current.itemCount} item(s)", color = Muted, fontSize = 12.sp)
+                    Text("Order #${current.id}", fontSize = 20.sp, fontFamily = Display, color = Ink)
+                    Text("Placed on ${current.date}  ·  ${current.itemCount} item(s)", color = Muted, fontSize = 12.sp)
                 }
                 StatusChip(status)
             }
@@ -57,35 +56,35 @@ fun OrderDetailsScreen(
 
         // Items
         Section {
-            Text("Items", fontWeight = FontWeight.SemiBold, color = Ink)
+            Eyebrow("Items")
             current.lines.forEachIndexed { i, line ->
                 Row(
                     Modifier.fillMaxWidth().clickable { onProduct(line.product) }.padding(vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    ProductImage(line.product, Modifier.size(56.dp, 66.dp), padding = 5)
+                    ProductImage(line.product, Modifier.size(60.dp, 80.dp), padding = 5)
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(line.product.name, color = Ink, fontSize = 14.sp)
-                        Text("${line.product.colorName}  •  Size ${line.size}  •  Qty ${line.qty}", color = Muted, fontSize = 12.sp)
+                        Text(line.product.name.uppercase(), color = Ink, fontSize = 12.sp, letterSpacing = 0.8.sp)
+                        Text("${line.product.colorName}  ·  Size ${line.size}  ·  Qty ${line.qty}", color = Muted, fontSize = 12.sp)
                         // Return / exchange (within 7 days of delivery, once per item)
                         val request = current.requestFor(i)
                         when {
-                            request != null -> Text(request.progress(current), color = Primary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            request != null -> Text(request.progress(current).uppercase(), color = Ink, fontSize = 11.sp, letterSpacing = 1.sp)
                             current.canReturn -> Text(
-                                "Return / Exchange", color = Primary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.padding(top = 2.dp).clickable { returning = i }
+                                "RETURN / EXCHANGE", color = Ink, fontSize = 11.sp, letterSpacing = 1.sp, textDecoration = TextDecoration.Underline,
+                                modifier = Modifier.padding(top = 4.dp).clickable { returning = i }
                             )
                         }
                     }
-                    Text(rupees(line.product.price * line.qty), fontWeight = FontWeight.SemiBold, color = Ink)
+                    Text(rupees(line.product.price * line.qty), fontSize = 13.sp, color = Ink)
                 }
             }
         }
 
         // Delivery
         Section {
-            Text("Delivery", fontWeight = FontWeight.SemiBold, color = Ink)
+            Eyebrow("Delivery")
             Spacer(Modifier.height(4.dp))
             InfoRow(Icons.Default.LocationOn, addressLabel, addressText)
             InfoRow(
@@ -101,39 +100,34 @@ fun OrderDetailsScreen(
                 TextButton(onClick = {
                     markDelivered(context, current.id)
                     current = current.copy(state = "Delivered", deliverOn = System.currentTimeMillis())
-                }) { Text("Demo: mark as delivered", fontSize = 12.sp) }
+                }) { Text("DEMO: MARK AS DELIVERED", fontSize = 11.sp, letterSpacing = 1.sp) }
             }
         }
 
         // Payment and price
         Section {
-            Text("Payment", fontWeight = FontWeight.SemiBold, color = Ink)
+            Eyebrow("Payment")
             Spacer(Modifier.height(4.dp))
             InfoRow(
                 if (current.payment == "Razorpay") Icons.Default.CreditCard else Icons.Default.Payments,
                 current.payment,
                 if (current.paymentId != "-") "Payment ID: ${current.paymentId}" else "Pay when the order arrives"
             )
-            HorizontalDivider(Modifier.padding(vertical = 8.dp), color = Color(0xFFECECF4))
+            Hairline(Modifier.padding(vertical = 8.dp))
             PriceRow("Items total", rupees(current.subtotal))
             if (current.subtotal > current.total) PriceRow("Coupon discount", "– " + rupees(current.subtotal - current.total))
             PriceRow("Delivery", "FREE")
             PriceRow(if (current.payment == "Razorpay") "Total paid" else "Total to pay", rupees(current.total), bold = true)
         }
 
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Spacer(Modifier.height(16.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (status == "Processing") {
-                OutlinedButton(onClick = { confirmCancel = true }, Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(16.dp)) {
-                    Text("Cancel Order", color = Rose)
-                }
+                ZaraOutlinedButton("Cancel order", Modifier.weight(1f)) { confirmCancel = true }
             }
-            Button(onClick = { onBuyAgain(current) }, Modifier.weight(1f).height(50.dp), shape = RoundedCornerShape(16.dp)) {
-                Icon(Icons.Default.Replay, contentDescription = null)
-                Spacer(Modifier.width(6.dp))
-                Text("Buy Again")
-            }
+            ZaraButton("Buy again", Modifier.weight(1f)) { onBuyAgain(current) }
         }
+        Spacer(Modifier.height(16.dp))
     }
 
     returning?.let { i ->
@@ -165,9 +159,9 @@ fun OrderDetailsScreen(
                     current = current.copy(state = "Cancelled")
                     confirmCancel = false
                     Toast.makeText(context, "Order cancelled", Toast.LENGTH_SHORT).show()
-                }) { Text("Yes, cancel", color = Rose) }
+                }) { Text("YES, CANCEL", color = Rose, letterSpacing = 1.sp) }
             },
-            dismissButton = { TextButton(onClick = { confirmCancel = false }) { Text("Keep order") } }
+            dismissButton = { TextButton(onClick = { confirmCancel = false }) { Text("KEEP ORDER", letterSpacing = 1.sp) } }
         )
     }
 }
@@ -198,19 +192,19 @@ fun ReturnDialog(order: Order, index: Int, suggested: String?, onDismiss: () -> 
                     ProductImage(line.product, Modifier.size(48.dp, 56.dp), padding = 4)
                     Spacer(Modifier.width(10.dp))
                     Column {
-                        Text(line.product.name, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                        Text("Size ${line.size}  •  Qty ${line.qty}", color = Muted, fontSize = 12.sp)
+                        Text(line.product.name.uppercase(), color = Ink, fontSize = 12.sp, letterSpacing = 0.8.sp)
+                        Text("Size ${line.size}  ·  Qty ${line.qty}", color = Muted, fontSize = 12.sp)
                     }
                 }
                 Spacer(Modifier.height(10.dp))
-                Text("Reason", fontWeight = FontWeight.SemiBold)
+                Eyebrow("Reason")
                 reasons.forEach { r ->
                     Row(Modifier.fillMaxWidth().clickable { reason = r }, verticalAlignment = Alignment.CenterVertically) {
                         RadioButton(selected = reason == r, onClick = { reason = r })
                         Text(r, fontSize = 14.sp)
                     }
                 }
-                Text("What would you like?", fontWeight = FontWeight.SemiBold)
+                Eyebrow("What would you like?", Modifier.padding(top = 8.dp, bottom = 4.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(selected = doExchange, onClick = { exchange = true }, enabled = canExchange, label = { Text("Exchange size") })
                     FilterChip(selected = !doExchange, onClick = { exchange = false }, label = { Text("Return for refund") })
@@ -218,10 +212,7 @@ fun ReturnDialog(order: Order, index: Int, suggested: String?, onDismiss: () -> 
                 if (doExchange) {
                     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         options.forEach { s ->
-                            FilterChip(
-                                selected = newSize == s, onClick = { newSize = s }, enabled = line.product.hasSize(s),
-                                label = { Text(if (s == suggested) "$s ★" else s) }
-                            )
+                            SizeBox(if (s == suggested) "$s ★" else s, selected = newSize == s, enabled = line.product.hasSize(s)) { newSize = s }
                         }
                     }
                     if (suggested != null) Text("★ = your size from the body scan", color = Muted, fontSize = 11.sp)
@@ -237,33 +228,30 @@ fun ReturnDialog(order: Order, index: Int, suggested: String?, onDismiss: () -> 
             }
         },
         confirmButton = {
-            Button(onClick = {
-                if (doExchange && newSize.isEmpty()) return@Button
+            ZaraButton(if (doExchange) "Request exchange" else "Request return") {
+                if (doExchange && newSize.isEmpty()) return@ZaraButton
                 onSubmit(
                     ReturnRequest(index, if (doExchange) "Exchange" else "Return", if (doExchange) newSize else "-", reason, System.currentTimeMillis())
                 )
-            }) { Text(if (doExchange) "Request Exchange" else "Request Return") }
+            }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
 
-/** White rounded box around a part of the screen. */
+/** One part of the screen in a rounded glass card. */
 @Composable
 fun Section(content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        Modifier.fillMaxWidth().padding(vertical = 6.dp).clip(RoundedCornerShape(18.dp)).background(Color.White).padding(14.dp),
-        content = content
-    )
+    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp).glass(CardShape).padding(16.dp), content = content)
 }
 
 @Composable
 fun InfoRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, detail: String) {
     Row(Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, contentDescription = null, tint = Accent, modifier = Modifier.size(22.dp))
+        Icon(icon, contentDescription = null, tint = Ink, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(10.dp))
         Column {
-            Text(title, color = Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+            Text(title, color = Ink, fontSize = 13.sp, fontWeight = FontWeight.Medium)
             if (detail.isNotEmpty()) Text(detail, color = Muted, fontSize = 12.sp)
         }
     }
@@ -303,15 +291,15 @@ fun OrderTimeline(order: Order) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(
                     if (i < done) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                    contentDescription = null, tint = if (i < done) Color(0xFF2E8B57) else Muted, modifier = Modifier.size(22.dp)
+                    contentDescription = null, tint = if (i < done) Primary else Disabled, modifier = Modifier.size(20.dp)
                 )
                 if (i < steps.lastIndex) {
-                    Box(Modifier.width(2.dp).height(22.dp).background(if (i + 1 < done) Color(0xFF2E8B57) else Color(0xFFE0E0EA)))
+                    Box(Modifier.width(2.dp).height(24.dp).background(if (i + 1 < done) Primary else Line))
                 }
             }
             Spacer(Modifier.width(10.dp))
             Column {
-                Text(title, color = if (i < done) Ink else Muted, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                Text(title.uppercase(), color = if (i < done) Ink else Muted, fontSize = 11.sp, letterSpacing = 1.2.sp, fontWeight = FontWeight.Medium)
                 Text(detail, color = Muted, fontSize = 12.sp)
             }
         }
