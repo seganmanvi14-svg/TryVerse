@@ -1,3 +1,4 @@
+import java.util.Properties
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -10,6 +11,11 @@ if (file("google-services.json").exists()) {
     apply(plugin = "com.google.gms.google-services")
 }
 
+// Razorpay TEST key id, read from local.properties (that file is never committed to GitHub)
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) localPropertiesFile.inputStream().use { localProperties.load(it) }
+
 android {
     namespace = "com.example.styletryon"
     compileSdk = 35
@@ -18,8 +24,9 @@ android {
         applicationId = "com.example.styletryon"
         minSdk = 26
         targetSdk = 35
-        versionCode = 11
-        versionName = "2.0"
+        versionCode = 12
+        versionName = "3.0"
+        buildConfigField("String", "RAZORPAY_KEY", "\"${localProperties.getProperty("RAZORPAY_KEY", "")}\"")
     }
 
     buildTypes {
@@ -82,6 +89,12 @@ dependencies {
     implementation("com.google.firebase:firebase-ai")
     implementation("com.google.firebase:firebase-appcheck-playintegrity")
     implementation("com.google.firebase:firebase-appcheck-debug")
+
+    // Online payment: Razorpay Standard Checkout (test mode)
+    implementation("com.razorpay:checkout:1.6.40")
+
+    // Maps: OpenStreetMap for picking the delivery address (free, no API key)
+    implementation("org.osmdroid:osmdroid-android:6.1.20")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
