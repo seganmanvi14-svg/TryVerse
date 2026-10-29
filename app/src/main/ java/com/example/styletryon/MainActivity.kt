@@ -1,39 +1,43 @@
 package com.example.styletryon
 
+import android.app.Activity
 import android.graphics.Bitmap
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.google.firebase.Firebase
 import com.google.firebase.FirebaseApp
 import com.google.firebase.appcheck.appCheck
 import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
 import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
 
-// ---------- TryVerse colours (from the design) ----------
-val Ink = Color(0xFF232A4D)          // main text
-val Brand = Color(0xFF2F3A8F)        // "Try" in the logo, headings
-val Accent = Color(0xFFA67CF0)       // "Verse" in the logo
-val Primary = Color(0xFF6286D8)      // main buttons
-val PrimaryDark = Color(0xFF4659A8)  // "Add to Cart" button
-val PrimaryLight = Color(0xFFE3E9FB) // light buttons, selected chips
-val SoftBlue = Color(0xFFEFF4FD)     // cards / upload box
-val Cream = Color(0xFFF8F8FD)        // screen background
-val Sand = Color(0xFFF1EEF3)         // behind product photos
-val Muted = Color(0xFF8A8CA3)        // secondary text
-val Rose = Color(0xFFE0707F)         // hearts, discounts
-val Star = Color(0xFFF2B233)         // rating star
+// Colours, type and shapes are in Theme.kt (Zara-style design system)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -46,6 +50,8 @@ class MainActivity : ComponentActivity() {
                 else PlayIntegrityAppCheckProviderFactory.getInstance()
             )
         }
+        // Black (Noir) is the default; the user can switch to light (Home sun icon / Account → Settings)
+        ThemeState.dark = loadThemeChoice(this) ?: true
         setContent { TryVerseApp() }
     }
 }
@@ -138,42 +144,32 @@ fun TryVerseApp() {
     val retry: (Product) -> Unit = { tryProduct = it; colorName = null; tint = null; editBase = null; go("processing") }
     val loggedIn: (User) -> Unit = { user = it; saveSession(context, it.email); openTab("home") }
 
-    MaterialTheme(
-        colorScheme = lightColorScheme(
-            primary = Primary, onPrimary = Color.White, secondary = Accent,
-            background = Cream, surface = Color.White, onBackground = Ink, onSurface = Ink,
-            secondaryContainer = PrimaryLight
-        )
-    ) {
+    // Status and navigation bars follow the theme (black bars with white icons in the black theme)
+    val view = LocalView.current
+    val dark = ThemeState.dark
+    SideEffect {
+        val window = (view.context as? Activity)?.window ?: return@SideEffect
+        @Suppress("DEPRECATION")
+        window.statusBarColor = Cream.toArgb()
+        @Suppress("DEPRECATION")
+        window.navigationBarColor = Cream.toArgb()
+        WindowCompat.getInsetsController(window, view).apply {
+            isAppearanceLightStatusBars = !dark
+            isAppearanceLightNavigationBars = !dark
+        }
+    }
+
+    ZaraTheme {
         Scaffold(
             containerColor = Cream,
-            bottomBar = {
-                if (screen in tabs) {
-                    NavigationBar(containerColor = Color.White) {
-                        val labels = listOf("Home", "Categories", "Try-On", "Cart", "Profile")
-                        val icons = listOf(Icons.Default.Home, Icons.Default.GridView, Icons.Default.Checkroom, Icons.Default.ShoppingCart, Icons.Default.Person)
-                        tabs.forEachIndexed { i, t ->
-                            NavigationBarItem(
-                                selected = screen == t,
-                                onClick = { openTab(t) },
-                                icon = {
-                                    BadgedBox(badge = { if (t == "cart" && cart.isNotEmpty()) Badge { Text("${cart.sumOf { it.qty }}") } }) {
-                                        Icon(icons[i], contentDescription = labels[i])
-                                    }
-                                },
-                                label = { Text(labels[i]) },
-                                colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = Primary, selectedTextColor = Primary, indicatorColor = PrimaryLight
-                                )
-                            )
-                        }
-                    }
-                }
-            }
+            bottomBar = { if (screen in tabs) NoirBottomBar(screen, cart.sumOf { it.qty }) { openTab(it) } }
         ) { pad ->
             Box(Modifier.padding(pad)) {
                 when (screen) {
-                    "splash" -> SplashScreen(onStart = { openTab(if (user != null) "home" else "signup") })
+                    "splash" -> SplashScreen(
+                        onStart = { openTab(if (user != null) "home" else "signup") },
+                        onLogin = { openTab(if (user != null) "home" else "login") }
+                    )
                     "signup" -> SignUpScreen(db = db, onSignedUp = loggedIn, onLogin = { go("login") })
                     "login" -> LoginScreen(db = db, onLoggedIn = loggedIn, onSignUp = { openTab("signup") })
                     "home" -> HomeScreen(
@@ -347,5 +343,53 @@ fun TryVerseApp() {
                 }
             }
         }
+    }
+}
+
+/**
+ * Noir bottom bar: Home, Categories, a raised round Try-On button with a champagne ring, Cart (with count), Profile.
+ */
+@Composable
+fun NoirBottomBar(screen: String, cartCount: Int, onTab: (String) -> Unit) {
+    val labels = listOf("Home", "Categories", "Try-On", "Cart", "Profile")
+    val icons = listOf(Icons.Rounded.Home, Icons.Rounded.GridView, Icons.Rounded.PhotoCamera, Icons.Rounded.ShoppingCart, Icons.Rounded.Person)
+    Box(Modifier.fillMaxWidth().navigationBarsPadding()) {
+        Column(Modifier.padding(top = 22.dp).fillMaxWidth().background(Paper)) {
+            Hairline()
+            Row(Modifier.fillMaxWidth().height(66.dp), verticalAlignment = Alignment.CenterVertically) {
+                tabs.forEachIndexed { i, t ->
+                    val on = screen == t
+                    Column(
+                        Modifier.weight(1f).fillMaxHeight().clickable { onTab(t) },
+                        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center
+                    ) {
+                        if (t == "tryon") {
+                            Spacer(Modifier.height(24.dp))      // the raised button sits above this label
+                        } else {
+                            Box {
+                                Icon(icons[i], contentDescription = labels[i], tint = if (on) Primary else Muted, modifier = Modifier.size(24.dp))
+                                if (t == "cart" && cartCount > 0) {
+                                    Text(
+                                        "$cartCount", color = OnInk, fontSize = 9.sp, fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.align(Alignment.TopEnd).offset(x = 8.dp, y = (-6).dp)
+                                            .clip(CircleShape).background(Primary).padding(horizontal = 5.dp, vertical = 1.dp)
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Text(labels[i], fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if (on) Primary else Muted)
+                    }
+                }
+            }
+        }
+        // Raised Try-On button
+        Box(
+            Modifier.align(Alignment.TopCenter).size(62.dp)
+                .shadow(16.dp, CircleShape, ambientColor = Gold, spotColor = Gold)
+                .clip(CircleShape).background(Brush.radialGradient(listOf(Color(0xFF1F1C17), Color(0xFF0B0A09))))
+                .border(1.5.dp, Gold, CircleShape).clickable { onTab("tryon") },
+            contentAlignment = Alignment.Center
+        ) { Icon(Icons.Rounded.PhotoCamera, contentDescription = "Try-On", tint = Gold, modifier = Modifier.size(26.dp)) }
     }
 }
