@@ -53,7 +53,7 @@ private val garmentFits = mapOf(
     R.drawable.dress_emerald_tulle to GarmentFit(0.06f, 0.18f, 0.82f, 0.29f, 0.28f, 0.74f, 0.60f, SleeveFit(0.18f, 0.06f, 0.06f, 0.12f, false)),
     R.drawable.dress_sunset_print to GarmentFit(0.02f, 0.26f, 0.74f, 0.26f, 0.26f, 0.74f, 0.60f),
     R.drawable.top_striped_knit to GarmentFit(0.07f, 0.15f, 0.85f, 0.97f, 0.18f, 0.82f, 1.05f, SleeveFit(0.15f, 0.07f, 0.10f, 0.88f, true)),
-    R.drawable.top_blush_blouse to GarmentFit(0.10f, 0.14f, 0.86f, 0.90f, 0.22f, 0.78f, 1.05f, SleeveFit(0.14f, 0.04f, 0.06f, 0.90f, true)),
+    R.drawable.top_blush_blouse to GarmentFit(0.06f, 0.29f, 0.71f, 0.76f, 0.30f, 0.70f, 1.05f, SleeveFit(0.27f, 0.07f, 0.12f, 0.82f, true)),
     R.drawable.top_red_floral to GarmentFit(0.06f, 0.12f, 0.88f, 0.45f, 0.25f, 0.75f, 0.60f),
     R.drawable.tee_midnight_fuji to GarmentFit(0.10f, 0.25f, 0.75f, 0.97f, 0.20f, 0.80f, 1.05f, SleeveFit(0.25f, 0.10f, 0.06f, 0.40f, false)),
     R.drawable.tee_dalmatian to GarmentFit(0.08f, 0.24f, 0.76f, 0.97f, 0.20f, 0.82f, 1.05f, SleeveFit(0.24f, 0.08f, 0.07f, 0.33f, false)),
@@ -113,11 +113,17 @@ data class Body(
     val wristA: Offset? = null, val wristB: Offset? = null,
     val mask: PersonMask? = null
 ) {
-    /** Arm bones (shoulder-elbow, elbow-wrist) so we don't measure the arms as part of the body. */
+    /** Arm bones (shoulder-elbow, elbow-wrist, the hand) so we don't measure the arms as part of the body. */
     fun arms(): List<Pair<Offset, Offset>> {
         val list = mutableListOf<Pair<Offset, Offset>>()
-        if (elbowA != null) { list.add(shoulderA to elbowA); if (wristA != null) list.add(elbowA to wristA) }
-        if (elbowB != null) { list.add(shoulderB to elbowB); if (wristB != null) list.add(elbowB to wristB) }
+        if (elbowA != null) {
+            list.add(shoulderA to elbowA)
+            if (wristA != null) { list.add(elbowA to wristA); list.add(wristA to wristA + (wristA - elbowA) * 0.6f) }
+        }
+        if (elbowB != null) {
+            list.add(shoulderB to elbowB)
+            if (wristB != null) { list.add(elbowB to wristB); list.add(wristB to wristB + (wristB - elbowB) * 0.6f) }
+        }
         return list
     }
 }
@@ -231,15 +237,15 @@ fun bodyLines(product: Product, body: Body, size: Float): List<Offset>? {
     val hw = maxOf((hB - hA).getDistance(), sw * 0.5f)
 
     if (product.type == "PANTS") {
-        val (waistL, waistR) = bodyLine(body, hips - down * (hw * 0.6f), across, hw * 1.4f, hw * 2.3f, hw * 1.9f, 1.05f * size)
+        val (waistL, waistR) = bodyLine(body, hips - down * (hw * 0.6f), across, hw * 1.4f, hw * 2.3f, hw * 1.9f, 1.1f * size)
         // Hip line: the widest part, so the trousers cover the hips and thighs
-        val (hipL, hipR) = bodyLine(body, hips + down * (hw * 0.15f), across, hw * 1.5f, hw * 2.8f, hw * 2.1f, 1.08f * size)
+        val (hipL, hipR) = bodyLine(body, hips + down * (hw * 0.15f), across, hw * 1.5f, hw * 2.8f, hw * 2.1f, 1.2f * size)
         val (aA, aB) = if (body.ankleA != null && body.ankleB != null) leftRight(body.ankleA, body.ankleB)
         else Pair(hA + down * (sw * 2.6f), hB + down * (sw * 2.6f))
         val aw = (aB - aA).getDistance()
         val ankleAcross = if (aw > 1f) (aB - aA) / aw else across
         val hem = (aA + aB) / 2f + down * (hw * 0.15f)
-        val hemHalf = maxOf(aw + hw * 1.15f, hw * 1.4f) * size / 2f
+        val hemHalf = maxOf(aw + hw * 1.3f, hw * 1.4f) * size / 2f
         return listOf(waistL, waistR, hem - ankleAcross * hemHalf, hem + ankleAcross * hemHalf, hipL, hipR)
     }
 
@@ -249,10 +255,10 @@ fun bodyLines(product: Product, body: Body, size: Float): List<Offset>? {
     // Low line: measured waist (dresses, peplum tops) or hips (tops).
     // The waist is never wider than the hips allow (arms held close to the body can make the outline look wider).
     val lowCenter = shoulders + (hips - shoulders) * fit.lowT
-    val (lowL, lowR) = if (fit.lowT < 1f) bodyLine(body, lowCenter, across, minOf(sw * 0.6f, hw * 1.2f), minOf(sw * 1.15f, hw * 1.6f), minOf(sw * 0.85f, hw * 1.45f), 1.06f * size)   // waist
+    val (lowL, lowR) = if (fit.lowT < 1f) bodyLine(body, lowCenter, across, minOf(sw * 0.6f, hw * 1.2f), minOf(sw * 1.15f, hw * 1.4f), minOf(sw * 0.85f, hw * 1.35f), 1.06f * size)   // waist
     else bodyLine(body, lowCenter, across, sw * 0.7f, sw * 1.4f, sw, 1.06f * size)                                                                       // hips
     // Hip line for skirts: a skirt sits close to the hips before it flares out
-    val (hipL, hipR) = bodyLine(body, hips + down * (hw * 0.3f), across, minOf(sw * 0.7f, hw * 1.5f), minOf(sw * 1.5f, hw * 2.3f), minOf(sw, hw * 2f), 1.15f * size)
+    val (hipL, hipR) = bodyLine(body, hips + down * (hw * 0.3f), across, minOf(sw * 0.7f, hw * 1.5f), minOf(sw * 1.5f, hw * 1.95f), minOf(sw, hw * 1.85f), 1.08f * size)
     return listOf(top - across * topHalf, top + across * topHalf, lowL, lowR, hipL, hipR)
 }
 
@@ -355,7 +361,7 @@ fun drawGarmentMesh(canvas: android.graphics.Canvas, garment: Bitmap, product: P
         var p = torso(fx, fy)
         if (sleeve == null) return p
         for (side in 0..1) {
-            val (shoulder, elbow, wrist) = armsOnScreen[side]
+            val (_, elbow, wrist) = armsOnScreen[side]
             if (elbow == null) continue
             val armTip = if (sleeve.long && wrist != null) wrist else elbow
             // Sleeve root and end in the photo (right sleeve = mirror of the left one)
@@ -371,7 +377,8 @@ fun drawGarmentMesh(canvas: android.graphics.Canvas, garment: Bitmap, product: P
             // Turn the sleeve around its root so it points along the arm
             val root = torso(rootX, sleeve.rootY)
             val photoDir = acrossDir * ((endX - rootX) * gw) + downDir * ((sleeve.endY - sleeve.rootY) * gh)
-            var turn = angleOf(armTip - shoulder) - angleOf(photoDir)
+            // Aim from the sleeve's root (just outside the shoulder) at the elbow / wrist, so the sleeve lies on the arm
+            var turn = angleOf(armTip - root) - angleOf(photoDir)
             while (turn > PI) turn -= (2 * PI).toFloat()
             while (turn < -PI) turn += (2 * PI).toFloat()
             val offset = (acrossDir * ((fx - rootX) * gw) + downDir * ((fy - sleeve.rootY) * gh)) * topScale
