@@ -1,8 +1,10 @@
 <resources>
-    <style name="Theme.StyleTryOn" parent="android:style/Theme.Material.Light.NoActionBar">
-        <item name="android:fontFamily">sans</item>
-        <item name="android:windowLightStatusBar">true</item>
-        <item name="android:statusBarColor">#F8F8FD</item>
-        <item name="android:navigationBarColor">#F8F8FD</item>
+    <!-- TryVerse Noir: black window and system bars, so the app never flashes white on launch -->
+    <style name="Theme.StyleTryOn" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:statusBarColor">#070706</item>
+        <item name="android:navigationBarColor">#070706</item>
+        <item name="android:windowBackground">@android:color/black</item>
     </style>
 </resources>
