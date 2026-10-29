@@ -16,11 +16,13 @@ import androidx.compose.ui.unit.sp
 
 // =====================================================================
 //  MY OUTFITS (lookbook)
-//  Outfits made with mix & match in the live camera (top + bottom, or a dress)
+//  Outfits made with mix & match (live camera or photo try-on: top + bottom, or a dress)
 //  are saved for the user in SQLite. From here they can be tried on live again,
 //  renamed, deleted, or added to the cart in one tap.
 // =====================================================================
 
+// *** MY OUTFITS SCREEN ***
+// The screen only shows the outfits; MainActivity does the saving in SQLite (onRename, onDelete...)
 @Composable
 fun OutfitsScreen(
     outfits: List<SavedOutfit>,
@@ -30,11 +32,13 @@ fun OutfitsScreen(
     onRename: (SavedOutfit, String) -> Unit,
     onDelete: (SavedOutfit) -> Unit
 ) {
+    // The outfit being renamed / deleted (null = no box showing)
     var renaming by remember { mutableStateOf<SavedOutfit?>(null) }
     var deleting by remember { mutableStateOf<SavedOutfit?>(null) }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         TopBar("My Outfits", onBack)
+        // No outfits yet: explain how to save one
         if (outfits.isEmpty()) {
             Column(Modifier.fillMaxWidth().padding(top = 80.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(Icons.Default.Checkroom, contentDescription = null, tint = Primary, modifier = Modifier.size(44.dp))
@@ -46,6 +50,7 @@ fun OutfitsScreen(
                 )
             }
         } else {
+            // One card per saved outfit
             LazyColumn {
                 items(outfits, key = { it.id }) { outfit ->
                     OutfitCard(
@@ -60,6 +65,7 @@ fun OutfitsScreen(
         }
     }
 
+    // Rename box (name can't be empty, max 30 letters)
     renaming?.let { outfit ->
         var name by remember(outfit.id) { mutableStateOf(outfit.name) }
         AlertDialog(
@@ -78,6 +84,7 @@ fun OutfitsScreen(
         )
     }
 
+    // 'Delete outfit?' box
     deleting?.let { outfit ->
         AlertDialog(
             onDismissRequest = { deleting = null },
@@ -88,8 +95,10 @@ fun OutfitsScreen(
     }
 }
 
+// *** ONE OUTFIT CARD ***: name, date, total price, the pieces with their sizes, and buttons
 @Composable
 fun OutfitCard(outfit: SavedOutfit, onTryLive: () -> Unit, onAddAll: () -> Unit, onRename: () -> Unit, onDelete: () -> Unit) {
+    // Pieces whose saved size is now out of stock (shown in red)
     val soldOut = outfit.items.filter { (p, size) -> !p.hasSize(size) }
     Column(Modifier.padding(vertical = 6.dp)) {
         Column(Modifier.fillMaxWidth().glass(CardShape).padding(14.dp)) {
@@ -115,6 +124,9 @@ fun OutfitCard(outfit: SavedOutfit, onTryLive: () -> Unit, onAddAll: () -> Unit,
             if (soldOut.isNotEmpty()) {
                 Text("Now out of stock: " + soldOut.joinToString { "${it.first.name} (${it.second})" }, color = Rose, fontSize = 12.sp)
             }
+            // Try live = open the live camera wearing this outfit. Add all = add every piece in stock to the
+            // cart
+            // (disabled if every piece is sold out)
             Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ZaraOutlinedButton("Try live", Modifier.weight(1f), icon = Icons.Default.Videocam, onClick = onTryLive)
                 ZaraButton("Add all", Modifier.weight(1f), enabled = soldOut.size < outfit.items.size, onClick = onAddAll)

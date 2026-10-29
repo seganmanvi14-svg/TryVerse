@@ -1,3 +1,8 @@
+// =====================================================================
+// ShopScreens.kt = THE SHOP: Home, Categories (smart search, search history, filters, sort),
+// Saved items (wishlist), Product page, and 'Complete Your Look'. Plus small shared pieces
+// (product photo, product card, top bar, + / - quantity).
+// =====================================================================
 package com.example.styletryon
 
 import android.widget.Toast
@@ -45,7 +50,7 @@ import androidx.compose.ui.unit.sp
 //  Shared pieces
 // ---------------------------------------------------------------------
 
-/** Garment photo in a rounded frame with a soft spotlight behind it. */
+// Garment photo in a rounded frame with a soft light behind it (used everywhere)
 @Composable
 fun ProductImage(product: Product, modifier: Modifier = Modifier, padding: Int = 12) {
     Box(
@@ -61,6 +66,7 @@ fun ProductImage(product: Product, modifier: Modifier = Modifier, padding: Int =
     }
 }
 
+// ★ 4.5 (120): rating and number of reviews
 @Composable
 fun RatingText(product: Product) {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -71,9 +77,10 @@ fun RatingText(product: Product) {
     }
 }
 
+// Price as text with the rupee sign and commas, e.g. ₹1,499
 fun rupees(amount: Int) = "₹%,d".format(amount)
 
-/** Back arrow + serif title in the middle (+ optional action on the right). */
+// Back arrow + screen title in the middle (+ an optional button on the right)
 @Composable
 fun TopBar(title: String, onBack: () -> Unit, action: @Composable () -> Unit = {}) {
     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -86,15 +93,16 @@ fun TopBar(title: String, onBack: () -> Unit, action: @Composable () -> Unit = {
     }
 }
 
-/** Discount as a whole percent (0 if there is none). */
+// Discount in % (from the old price and the new price)
 fun Product.offPercent(): Int = if (oldPrice > price) 100 - price * 100 / oldPrice else 0
 
-/** Product card: rounded framed photo, heart, small discount tag, bold name, price and rating. */
+// *** PRODUCT CARD ***: photo, ♡ save button, -% tag, name, price, rating
 @Composable
 fun ProductCard(product: Product, wishlisted: Boolean, onWish: (Product) -> Unit, onClick: (Product) -> Unit, modifier: Modifier = Modifier) {
     Column(modifier.clickable { onClick(product) }) {
         Box {
             ProductImage(product, Modifier.fillMaxWidth().aspectRatio(0.78f), padding = 14)
+            // *** OUT OF STOCK: the card is faded with an 'Out of stock' label ***
             if (!product.inStock) {
                 Box(Modifier.matchParentSize().clip(Sharp).background(Cream.copy(alpha = 0.55f)))
                 GlassChip("Out of stock", Modifier.align(Alignment.Center), dotColor = Rose)
@@ -126,7 +134,7 @@ fun ProductCard(product: Product, wishlisted: Boolean, onWish: (Product) -> Unit
     }
 }
 
-/** Two products per row (for use inside scrolling columns). */
+// Two products per row
 @Composable
 fun ProductGrid(products: List<Product>, wishlist: List<Int>, onWish: (Product) -> Unit, onProduct: (Product) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
@@ -139,7 +147,7 @@ fun ProductGrid(products: List<Product>, wishlist: List<Int>, onWish: (Product) 
     }
 }
 
-/** – 1 +  in a glass pill. */
+// The – 1 + buttons (can't go below 1)
 @Composable
 fun QuantityStepper(qty: Int, onChange: (Int) -> Unit) {
     Row(Modifier.glass(Pill), verticalAlignment = Alignment.CenterVertically) {
@@ -157,7 +165,7 @@ fun QuantityStepper(qty: Int, onChange: (Int) -> Unit) {
 //  Home (Noir: greeting, glass search, category rings, "New You" card, trending)
 // ---------------------------------------------------------------------
 
-/** Round category bubble with a champagne gradient ring (like a story ring). */
+// Round category bubble with a gold ring (like an Instagram story)
 @Composable
 fun CategoryRing(product: Product, label: String, onClick: () -> Unit) {
     Column(Modifier.clickable { onClick() }, horizontalAlignment = Alignment.CenterHorizontally) {
@@ -175,7 +183,7 @@ fun CategoryRing(product: Product, label: String, onClick: () -> Unit) {
     }
 }
 
-/** Rounded campaign card: model photo, "NEW SEASON 01 / 04", big serif title, glass button. */
+// The big 'New You' card on Home: the demo model wearing a product, title and a button
 @Composable
 fun CampaignBanner(product: Product, eyebrow: String, title: String, button: String, height: Int, onClick: () -> Unit) {
     Box(Modifier.fillMaxWidth().height(height.dp).clip(CardShape).border(1.dp, Gold.copy(alpha = 0.25f), CardShape).clickable { onClick() }) {
@@ -207,6 +215,7 @@ fun CampaignBanner(product: Product, eyebrow: String, title: String, button: Str
     }
 }
 
+// *** HOME SCREEN ***
 @Composable
 fun HomeScreen(
     userName: String,
@@ -220,6 +229,7 @@ fun HomeScreen(
     val firstName = userName.substringBefore(" ")
     val context = LocalContext.current
     val side = Modifier.padding(horizontal = 18.dp)
+    // LazyColumn = a scrolling page; each item { } is one part of the page
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         // Greeting
         item {
@@ -233,6 +243,7 @@ fun HomeScreen(
                     Text("Hi, $firstName", fontFamily = Display, fontSize = 22.sp, color = Ink)
                     Text("Good to see you again.", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Normal)
                 }
+                // Sun / moon icon: switch between the black and the light theme
                 IconButton(onClick = { toggleBlackTheme(context) }) {
                     Icon(
                         if (ThemeState.dark) Icons.Rounded.LightMode else Icons.Rounded.DarkMode,
@@ -247,6 +258,7 @@ fun HomeScreen(
         // Glass search (opens Categories) + filters
         item {
             Row(
+                // Search bar look-alike: tapping it opens Categories (where the real search is)
                 side.fillMaxWidth().height(48.dp).glass(Pill).clickable { onCategory("All") }.padding(start = 16.dp, end = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -262,10 +274,12 @@ fun HomeScreen(
                 Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 18.dp),
                 horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
+                // One ring per category (drop(1) skips 'All')
                 categories.drop(1).forEach { cat -> CategoryRing(catalog.first { it.category == cat }, cat) { onCategory(cat) } }
             }
         }
         // "New You" campaign card
+        // The 'New You' banner
         item { Box(side) { CampaignBanner(catalog[1], "New season", "New\nYou", "Shop Now", 250, onShopNow) } }
         // Trending
         item {
@@ -277,6 +291,7 @@ fun HomeScreen(
         }
         item {
             LazyRow(contentPadding = PaddingValues(horizontal = 18.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                // Trending Now = the 6 products with the most reviews
                 items(catalog.sortedByDescending { it.reviews }.take(6)) { p ->
                     ProductCard(p, wishlist.contains(p.id), onWish, onProduct, Modifier.width(140.dp))
                 }
@@ -292,14 +307,15 @@ fun HomeScreen(
 //  Search and filters
 // ---------------------------------------------------------------------
 
-/** "dresses" -> "dress", "tops" -> "top", so plural and singular searches both match. */
+// *** SMARTER SEARCH ***
+// "dresses" -> "dress", "tops" -> "top", so plural and singular searches both match
 fun singular(word: String): String = when {
     word.length > 4 && word.endsWith("es") && (word.endsWith("sses") || word.endsWith("shes") || word.endsWith("ches")) -> word.dropLast(2)
     word.length > 3 && word.endsWith("s") && !word.endsWith("ss") -> word.dropLast(1)
     else -> word
 }
 
-/** Extra words for each garment type, so "bottoms", "pants" or "trousers" also find jeans. */
+// Extra words for each type, so 'pants', 'bottoms' or 'trousers' also find jeans
 private fun typeWords(type: String) = when (type) {
     "PANTS" -> "pants trousers bottom bottoms jeans denim"
     "DRESS" -> "dress dresses gown frock one-piece"
@@ -310,13 +326,17 @@ private fun typeWords(type: String) = when (type) {
  * Smarter search: every word typed must appear somewhere in the product's name, category,
  * colour, colour family, description or type. Example: "blue dress", "black jeans", "floral".
  */
+// *** SEARCH MATCH ***
+// Every word typed must appear in the product's name, category, colour, colour family, description or type.
+// Example: 'blue dress' finds blue dresses only
 fun Product.matches(query: String): Boolean {
     val words = query.lowercase().split(" ", ",").map { singular(it.trim()) }.filter { it.isNotEmpty() }
     val text = "$name $category $colorName ${colourFamily(color)} $description ${typeWords(type)}".lowercase()
     return words.all { text.contains(it) }
 }
 
-/** Groups a product colour into a simple family for the colour filter (uses the colour's hue). */
+// Puts a colour into a simple family (Red, Blue, Black...) using its hue (the angle on the colour wheel), for
+// the colour filter
 fun colourFamily(c: Color): String {
     val hsv = FloatArray(3)
     android.graphics.Color.colorToHSV(c.toArgb(), hsv)
@@ -335,9 +355,10 @@ fun colourFamily(c: Color): String {
     }
 }
 
+// Highest price on the price slider
 const val MAX_PRICE = 4000
 
-/** Everything the Filters pop-up can choose. */
+// *** FILTERS ***: price range, sizes, colours, minimum rating, hide out of stock
 data class ShopFilters(
     val minPrice: Int = 0,
     val maxPrice: Int = MAX_PRICE,
@@ -346,10 +367,11 @@ data class ShopFilters(
     val minRating: Double = 0.0,
     val inStockOnly: Boolean = false
 ) {
-    /** How many filters are switched on (shown on the Filters button). */
+    // How many filters are on (shown as 'Filters (2)')
     val count: Int
         get() = listOf(minPrice > 0 || maxPrice < MAX_PRICE, sizes.isNotEmpty(), colours.isNotEmpty(), minRating > 0, inStockOnly).count { it }
 
+    // Does this product pass ALL the filters?
     fun allows(p: Product) =
         p.price in minPrice..maxPrice &&
             (sizes.isEmpty() || p.sizes.any { it in sizes && p.hasSize(it) }) &&
@@ -358,7 +380,7 @@ data class ShopFilters(
             (!inStockOnly || p.inStock)
 }
 
-/** Search text, sort and filters are kept here so they are still set after opening a product and coming back. */
+// Search text, sort and filters are kept here, so they stay set after opening a product and coming back
 object ShopState {
     var query by mutableStateOf("")
     var sort by mutableStateOf("Popular")
@@ -369,12 +391,14 @@ object ShopState {
     }
 }
 
+// Sort choices
 val sortOptions = listOf("Popular", "Price: Low to High", "Price: High to Low", "Top Rated")
 
 // ---------------------------------------------------------------------
 //  Categories: search (with history) + chips + sort spinner + filters + grid
 // ---------------------------------------------------------------------
 
+// *** CATEGORIES SCREEN (search + history + filters + sort) ***
 @Composable
 fun CategoriesScreen(
     category: String,
@@ -393,9 +417,11 @@ fun CategoriesScreen(
     var sortOpen by remember { mutableStateOf(false) }
     var showFilters by remember { mutableStateOf(startWithFilters) }
 
+    // STEP 1: keep products that match the category, the search words AND the filters
     var shown = catalog.filter {
         (category == "All" || it.category == category) && (query.isBlank() || it.matches(query)) && filters.allows(it)
     }
+    // STEP 2: sort them (default Popular = most reviews first)
     shown = when (ShopState.sort) {
         "Price: Low to High" -> shown.sortedBy { it.price }
         "Price: High to Low" -> shown.sortedByDescending { it.price }
@@ -403,12 +429,14 @@ fun CategoriesScreen(
         else -> shown.sortedByDescending { it.reviews }
     }
     // Opening a product from a search counts as a finished search
+    // Opening a product after searching saves the search in the history
     val open: (Product) -> Unit = { p -> if (query.isNotBlank()) onSearched(query); onProduct(p) }
 
     Column(Modifier.fillMaxSize().padding(horizontal = 14.dp)) {
         Spacer(Modifier.height(12.dp))
         DisplayTitle(if (category == "All") "Shop All" else category, size = 32.sp, modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp))
         // Rounded glass search field
+        // The search box. Pressing Search on the keyboard saves the search to this user's history
         OutlinedTextField(
             value = query, onValueChange = { ShopState.query = it.take(40) },
             modifier = Modifier.fillMaxWidth(), singleLine = true, shape = Pill,
@@ -422,6 +450,7 @@ fun CategoriesScreen(
             colors = underlineFieldColors()
         )
         // Recent searches (saved for each user)
+        // *** SEARCH HISTORY ***: this user's recent searches (from SQLite) as chips, with Clear
         if (query.isBlank() && history.isNotEmpty()) {
             Row(Modifier.padding(top = 10.dp, start = 4.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Eyebrow("Recent searches", color = Muted)
@@ -439,9 +468,11 @@ fun CategoriesScreen(
             }
         }
         // Category menu as text tabs
+        // Category tabs (All, Tops, Dresses...)
         TextTabs(categories, selected = category, onSelect = { onCategory(it) }, modifier = Modifier.padding(top = 6.dp, start = 4.dp))
         Hairline()
         // Item count, Filters button and the sort spinner (drop-down)
+        // Number of items, Filters button and Sort drop-down
         Row(Modifier.padding(start = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("${shown.size} items", color = Muted, fontSize = 12.sp)
             Spacer(Modifier.weight(1f))
@@ -462,6 +493,7 @@ fun CategoriesScreen(
                 }
             }
         }
+        // Nothing found: suggest other words, or clearing the filters
         if (shown.isEmpty()) {
             Column(Modifier.fillMaxWidth().padding(top = 40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 DisplayTitle("No items found", size = 24.sp)
@@ -473,6 +505,7 @@ fun CategoriesScreen(
                 }
             }
         }
+        // The products, 2 per row
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -483,17 +516,19 @@ fun CategoriesScreen(
         }
     }
 
+    // Filters box; Apply saves the new filters
     if (showFilters) {
         FiltersDialog(filters, onApply = { ShopState.filters = it; showFilters = false }, onDismiss = { showFilters = false })
     }
 }
 
-/** Pop-up to filter by price (range slider), size, colour, rating and stock. */
+// *** FILTERS BOX ***: f = the filters being changed (only saved when 'Show N items' is pressed)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FiltersDialog(start: ShopFilters, onApply: (ShopFilters) -> Unit, onDismiss: () -> Unit) {
     var f by remember { mutableStateOf(start) }
     val colourFamilies = remember { catalog.map { colourFamily(it.color) }.distinct() }
+    // How many products the chosen filters would show
     val count = catalog.count { f.allows(it) }
 
     AlertDialog(
@@ -502,6 +537,7 @@ fun FiltersDialog(start: ShopFilters, onApply: (ShopFilters) -> Unit, onDismiss:
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 Eyebrow("Price: ${rupees(f.minPrice)} – ${rupees(f.maxPrice)}")
+                // Price slider with two handles (min and max), in steps of ₹500
                 RangeSlider(
                     value = f.minPrice.toFloat()..f.maxPrice.toFloat(),
                     onValueChange = { f = f.copy(minPrice = it.start.toInt(), maxPrice = it.endInclusive.toInt()) },
@@ -509,6 +545,7 @@ fun FiltersDialog(start: ShopFilters, onApply: (ShopFilters) -> Unit, onDismiss:
                     steps = 7                                   // steps of ₹500
                 )
                 Eyebrow("Size", Modifier.padding(top = 8.dp, bottom = 4.dp))
+                // Size chips (tap again to remove)
                 listOf(topSizes, waistSizes).forEach { row ->
                     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         row.forEach { size ->
@@ -522,6 +559,7 @@ fun FiltersDialog(start: ShopFilters, onApply: (ShopFilters) -> Unit, onDismiss:
                 }
                 Eyebrow("Colour", Modifier.padding(top = 12.dp, bottom = 4.dp))
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // Colour chips
                     colourFamilies.forEach { c ->
                         FilterChip(
                             selected = c in f.colours,
@@ -531,11 +569,13 @@ fun FiltersDialog(start: ShopFilters, onApply: (ShopFilters) -> Unit, onDismiss:
                     }
                 }
                 Eyebrow("Rating", Modifier.padding(top = 12.dp, bottom = 4.dp))
+                // Rating chips: Any, 4.0+, 4.5+
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf(0.0 to "Any", 4.0 to "4.0 ★ & up", 4.5 to "4.5 ★ & up").forEach { (value, label) ->
                         FilterChip(selected = f.minRating == value, onClick = { f = f.copy(minRating = value) }, label = { Text(label) })
                     }
                 }
+                // Hide out of stock items switch
                 Row(Modifier.fillMaxWidth().clickable { f = f.copy(inStockOnly = !f.inStockOnly) }, verticalAlignment = Alignment.CenterVertically) {
                     Text("Hide out of stock items", Modifier.weight(1f))
                     Switch(checked = f.inStockOnly, onCheckedChange = { f = f.copy(inStockOnly = it) })
@@ -551,6 +591,7 @@ fun FiltersDialog(start: ShopFilters, onApply: (ShopFilters) -> Unit, onDismiss:
 //  Saved items (wishlist)
 // ---------------------------------------------------------------------
 
+// *** SAVED ITEMS (WISHLIST) ***: the products the user tapped ♡ on (saved in SQLite)
 @Composable
 fun SavedScreen(wishlist: List<Int>, onWish: (Product) -> Unit, onProduct: (Product) -> Unit, onBack: () -> Unit) {
     val items = catalog.filter { wishlist.contains(it.id) }
@@ -574,15 +615,18 @@ fun SavedScreen(wishlist: List<Int>, onWish: (Product) -> Unit, onProduct: (Prod
 //  Product detail
 // ---------------------------------------------------------------------
 
-/** [yourSize] = size suggested from the user's body scan in Live Try-On (null if they haven't scanned). */
+// *** PRODUCT PAGE ***
+// [yourSize] = size suggested from the body scan (null if not scanned yet)
 @Composable
 fun ProductDetailScreen(
     product: Product, wishlisted: Boolean, onBack: () -> Unit, onWish: () -> Unit,
     onAdd: (Product, String) -> Unit, onTry: () -> Unit, yourSize: String? = null
 ) {
     val context = LocalContext.current
+    // Starts with the user's size if it is in stock, else the default size
     var chosenSize by remember(product.id) { mutableStateOf(yourSize?.takeIf { product.hasSize(it) } ?: product.defaultSize()) }
     var qty by remember(product.id) { mutableIntStateOf(1) }
+    // false = garment photo, true = the demo model wearing it
     var showOnModel by remember(product.id) { mutableStateOf(false) }
     var showSizeGuide by remember { mutableStateOf(false) }
     var shareMenu by remember { mutableStateOf(false) }
@@ -592,6 +636,7 @@ fun ProductDetailScreen(
         // Big photo with the thumbnails on the left and glass buttons on top
         Box(Modifier.fillMaxWidth().height(440.dp)) {
             Box(Modifier.fillMaxSize().background(Brush.radialGradient(listOf(Spotlight, Sand)))) {
+                // *** 'ON MODEL' PICTURE: the garment fitted onto the demo model ***
                 if (showOnModel) DemoModelTryOn(product, Modifier.fillMaxSize())
                 else ProductImage(product, Modifier.fillMaxSize().padding(start = 70.dp, end = 10.dp, top = 70.dp, bottom = 40.dp), padding = 10)
             }
@@ -617,6 +662,7 @@ fun ProductDetailScreen(
                 ) { onWish() }
             }
             // Thumbnails: product photo / on the model
+            // Two small thumbnails on the left: product photo / on the model
             Column(Modifier.align(Alignment.CenterStart).padding(start = 14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 ProductImage(
                     product,
@@ -662,17 +708,20 @@ fun ProductDetailScreen(
             }
             Spacer(Modifier.height(6.dp))
             // Sizes that are out of stock are faded and crossed through
+            // Size buttons: sold-out sizes are crossed out and can't be picked
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 product.sizes.forEach { s ->
                     SizeBox(s, selected = chosenSize == s && product.hasSize(s), enabled = product.hasSize(s)) { chosenSize = s }
                 }
             }
             Spacer(Modifier.height(6.dp))
+            // Out of stock messages
             when {
                 !product.inStock -> Text("Out of stock in all sizes. Check back soon!", color = Rose, fontSize = 13.sp)
                 product.soldOut.isNotEmpty() -> Text("Sold out in: ${product.soldOut.joinToString(", ")}", color = Rose, fontSize = 12.sp)
             }
             // Size recommendation from the live camera body scan
+            // *** 'YOUR SIZE' from the body scan ***
             if (yourSize != null) {
                 Row(
                     Modifier.padding(top = 8.dp).glass(Pill).padding(horizontal = 12.dp, vertical = 8.dp),
@@ -701,6 +750,7 @@ fun ProductDetailScreen(
                 Text("Free delivery  ·  Easy 7-day returns", color = Muted, fontSize = 12.sp, fontWeight = FontWeight.Normal)
             }
             Spacer(Modifier.height(16.dp))
+            // *** ADD TO CART *** (disabled if the chosen size is sold out)
             ZaraButton(
                 if (product.inStock) "Add to Cart" else "Out of Stock", Modifier.fillMaxWidth(),
                 enabled = product.hasSize(chosenSize)          // can't buy a size that is out of stock
@@ -709,11 +759,13 @@ fun ProductDetailScreen(
                 Toast.makeText(context, "Added to cart: ${product.name} ($chosenSize) × $qty", Toast.LENGTH_SHORT).show()
             }
             Spacer(Modifier.height(10.dp))
+            // Opens the Try-On screen with this product
             ZaraOutlinedButton("Try-On", Modifier.fillMaxWidth(), icon = Icons.Rounded.PhotoCamera, onClick = onTry)
             Spacer(Modifier.height(24.dp))
         }
     }
 
+    // Size guide table (chest and waist in inches)
     if (showSizeGuide) {
         AlertDialog(
             onDismissRequest = { showSizeGuide = false },
@@ -733,6 +785,7 @@ fun ProductDetailScreen(
 //  Complete Your Look
 // ---------------------------------------------------------------------
 
+// *** COMPLETE YOUR LOOK ***: pieces that go with the product (pairsWith in Data.kt), each with ♡ and +
 @Composable
 fun CompleteLookScreen(product: Product, wishlist: List<Int>, onWish: (Product) -> Unit, onAdd: (Product) -> Unit, onBack: () -> Unit, onCart: () -> Unit) {
     val context = LocalContext.current

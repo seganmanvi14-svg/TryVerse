@@ -1,3 +1,9 @@
+// =====================================================================
+// Data.kt = THE SHOP'S PRODUCTS (the catalogue) and the cart item.
+// All 24 products are written here in the code (no server needed). Each product has its garment photo
+// (background removed) in res/drawable-nodpi, and a type (TOP / DRESS / PANTS) that tells the try-on
+// where to put it on the body.
+// =====================================================================
 package com.example.styletryon
 
 import androidx.compose.ui.graphics.Color
@@ -12,6 +18,8 @@ import androidx.compose.ui.graphics.Color
  * type  = where it sits on the body during try-on: "TOP", "DRESS" or "PANTS"
  * soldOut = sizes that are out of stock (all sizes = the product is out of stock)
  */
+// One product: id, name, category, price, old price (for the % OFF), rating, number of reviews,
+// colour name + colour, sizes, garment photo, type, description, and the sizes that are SOLD OUT
 data class Product(
     val id: Int,
     val name: String,
@@ -29,20 +37,24 @@ data class Product(
     val soldOut: List<String> = emptyList()
 )
 
-/** True if at least one size can still be bought. */
+// *** OUT OF STOCK CHECK ***
+// In stock = at least one size is not sold out
 val Product.inStock: Boolean get() = sizes.any { it !in soldOut }
 
+// Can this exact size be bought? (it exists and is not sold out)
 fun Product.hasSize(size: String) = size in sizes && size !in soldOut
 
-/** Size picked at first: M (or waist 32) if it is in stock, otherwise the first size in stock. */
+// The size picked at first: M (or waist 32) if in stock, else the first size in stock
 fun Product.defaultSize(): String = sizes[2].takeIf { hasSize(it) } ?: sizes.firstOrNull { hasSize(it) } ?: sizes[2]
 
-/** A product in the cart, with its chosen size and quantity. */
+// One item in the cart: the product, chosen size, how many, and whether it is ticked for buying
 data class CartItem(val product: Product, val size: String, val qty: Int = 1, val checked: Boolean = true)
 
+// Sizes for tops and dresses (letters) and for pants (waist in inches)
 val topSizes = listOf("XS", "S", "M", "L", "XL")
 val waistSizes = listOf("28", "30", "32", "34", "36")
 
+// *** ALL 24 PRODUCTS OF THE SHOP ***
 val catalog = listOf(
     Product(1, "Blush Bell-Sleeve Blouse", "Tops", 1499, 2199, 4.5, 120, "Blush", Color(0xFFF0B7B3), topSizes, R.drawable.top_blush_blouse, "TOP",
         "Soft V-neck blouse with dramatic bell sleeves. Tuck it into jeans for an easy, elegant look."),
@@ -96,14 +108,17 @@ val catalog = listOf(
         "Cotton A-line kurti with white floral embroidery and three-quarter sleeves. Pair it with trousers or jeans.")
 )
 
+// Finds a product by its id (used when reading the cart, orders and outfits back from storage)
 fun productById(id: Int): Product? = catalog.firstOrNull { it.id == id }
 
+// Category chips on the Categories screen
 val categories = listOf("All", "Tops", "Dresses", "Jeans", "Trousers", "T-Shirts", "Shirts", "Kurtis")
 
 /** Sample model photos on the Try-On screen. */
 val sampleModels = listOf(R.drawable.sample_model_1, R.drawable.sample_model_2, R.drawable.sample_model_3, R.drawable.sample_model_4)
 
-/** Products that go well with the one being tried on ("Complete Your Look"), only ones in stock. */
+// 'Complete your look': tops go with pants, pants with tops, a dress with other dresses and tops. Only items in
+// stock
 fun pairsWith(product: Product): List<Product> = when (product.type) {
     "PANTS" -> catalog.filter { it.type == "TOP" }
     "TOP" -> catalog.filter { it.type == "PANTS" }

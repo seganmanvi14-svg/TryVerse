@@ -1,3 +1,8 @@
+// =====================================================================
+// Theme.kt = THE LOOK OF THE APP (design system): colours, fonts, shapes and shared buttons / labels.
+// Every screen uses these names (Ink, Primary, Cream...), so changing a colour here changes it everywhere.
+// Black (Noir) theme is the default; the user can switch to the light theme (sun icon on Home).
+// =====================================================================
 package com.example.styletryon
 
 import android.content.Context
@@ -48,23 +53,28 @@ import java.io.File
 // =====================================================================
 
 // ---------- Theme switch (black is the default) ----------
+// Is the black theme on? mutableStateOf = when it changes, every screen redraws in the new colours
 object ThemeState {
     var dark by mutableStateOf(true)
 }
 
+// Reads the saved theme choice from theme.txt (null = never chosen)
 fun loadThemeChoice(context: Context): Boolean? {
     val file = File(context.filesDir, "theme.txt")
     return if (file.exists()) file.readText().trim() == "dark" else null
 }
 
+// Switches black <-> light and saves the choice in theme.txt
 fun toggleBlackTheme(context: Context) {
     ThemeState.dark = !ThemeState.dark
     File(context.filesDir, "theme.txt").writeText(if (ThemeState.dark) "dark" else "light")
 }
 
+// Picks the light-theme or the black-theme version of a colour
 private fun pick(light: Long, dark: Long) = Color(if (ThemeState.dark) dark else light)
 
 // ---------- Colours ----------
+// *** COLOURS *** each one has a light and a dark version (get() = worked out every time it is used)
 val Ink: Color get() = pick(0xFF111111, 0xFFF4EEE2)          // main text (warm ivory)
 val Brand: Color get() = pick(0xFF8A7552, 0xFFD9C4A0)        // champagne accent
 val Accent: Color get() = Brand
@@ -86,6 +96,7 @@ val Disabled: Color get() = pick(0xFFBDBDBD, 0xFF3A3733)
 /** Frosted glass fill (6 % white on black). */
 val GlassFill: Color get() = pick(0x0A000000, 0x0FFFFFFF)
 
+// Champagne gold colours and gradients (same in both themes)
 val Gold = Color(0xFFD9C4A0)
 val GoldLight = Color(0xFFF3E7CF)
 val GoldDeep = Color(0xFF9C8763)
@@ -94,11 +105,13 @@ val GoldSweep: Brush = Brush.horizontalGradient(listOf(GoldLight, Gold, GoldDeep
 val GoldBrush: Brush = Brush.verticalGradient(listOf(Color(0xFFFFF6E3), Gold, Color(0xFFA88F66)))
 
 // ---------- Fonts ----------
+// *** FONTS ***: Gloock for big titles, Chorus for the cursive words, Outfit for normal text
 val Display = FontFamily(Font(R.font.gloock_regular))
 val ScriptFont = FontFamily(Font(R.font.chorus_script))
 val SansText = FontFamily(Font(R.font.outfit_regular, FontWeight.Normal), Font(R.font.outfit_bold, FontWeight.Bold))
 
 private val base = Typography()
+// Which font and size each kind of text uses (titles, body text, labels)
 val ZaraTypography = Typography(
     displayLarge = base.displayLarge.copy(fontFamily = Display),
     displayMedium = base.displayMedium.copy(fontFamily = Display),
@@ -118,7 +131,7 @@ val ZaraTypography = Typography(
 )
 
 // ---------- Shapes ----------
-/** Card / photo frame corners. (Name kept from the earlier design.) */
+// *** SHAPES ***: rounded corners for cards, pill buttons, text boxes
 val Sharp = RoundedCornerShape(14.dp)
 val Pill = RoundedCornerShape(50)
 val CardShape = RoundedCornerShape(22.dp)
@@ -129,6 +142,7 @@ val ZaraShapes = Shapes(
     large = RoundedCornerShape(22.dp), extraLarge = RoundedCornerShape(28.dp)
 )
 
+// Gives Material 3 (buttons, dialogs, text boxes) our colours, for the black or the light theme
 @Composable
 fun zaraColors(): ColorScheme =
     if (ThemeState.dark) darkColorScheme(
@@ -151,6 +165,7 @@ fun zaraColors(): ColorScheme =
         outline = Color(0x55000000), outlineVariant = Line, error = Rose, onError = Color.White
     )
 
+// Wraps the whole app so every screen uses our colours, fonts and shapes
 @Composable
 fun ZaraTheme(content: @Composable () -> Unit) {
     MaterialTheme(colorScheme = zaraColors(), typography = ZaraTypography, shapes = ZaraShapes, content = content)
@@ -160,14 +175,14 @@ fun ZaraTheme(content: @Composable () -> Unit) {
 //  Modifiers
 // =====================================================================
 
-/** Frosted glass: rounded, 6 % white fill, 12 % white border. */
+// 'Frosted glass' look: rounded, slightly see-through fill with a thin border
 fun Modifier.glass(shape: Shape = FieldShape): Modifier =
     this.clip(shape).background(GlassFill).border(1.dp, Line, shape)
 
-/** Rounded photo frame with a thin border. [glow] is kept for older calls. */
+// Rounded photo frame with a thin border
 fun Modifier.goldFrame(glow: Dp = 0.dp): Modifier = this.clip(Sharp).border(1.dp, Line, Sharp)
 
-/** The TRYVERSE wordmark style: champagne gradient letters. */
+// Text filled with the gold gradient (the TRYVERSE logo)
 @OptIn(ExperimentalTextApi::class)
 fun goldText(glow: Float = 0f) = TextStyle(brush = GoldBrush)
 
@@ -175,7 +190,7 @@ fun goldText(glow: Float = 0f) = TextStyle(brush = GoldBrush)
 //  Shared pieces
 // =====================================================================
 
-/** Main button: champagne pill with dark bold text. */
+// *** MAIN BUTTON *** (gold gradient pill). Grey when disabled
 @Composable
 fun ZaraButton(text: String, modifier: Modifier = Modifier, icon: ImageVector? = null, enabled: Boolean = true, onClick: () -> Unit) {
     Button(
@@ -196,7 +211,7 @@ fun ZaraButton(text: String, modifier: Modifier = Modifier, icon: ImageVector? =
     }
 }
 
-/** Second button: ivory outline pill. */
+// Second button: outline pill
 @Composable
 fun ZaraOutlinedButton(text: String, modifier: Modifier = Modifier, icon: ImageVector? = null, enabled: Boolean = true, onClick: () -> Unit) {
     OutlinedButton(
@@ -213,31 +228,31 @@ fun ZaraOutlinedButton(text: String, modifier: Modifier = Modifier, icon: ImageV
     }
 }
 
-/** Small spaced UPPERCASE label in champagne ("NEW SEASON", "SIZE"). */
+// Small spaced CAPITAL label (e.g. NEW SEASON, SIZE)
 @Composable
 fun Eyebrow(text: String, modifier: Modifier = Modifier, color: Color = Primary) {
     Text(text.uppercase(), modifier = modifier, color = color, fontSize = 10.sp, letterSpacing = 3.sp, fontWeight = FontWeight.Bold)
 }
 
-/** Big editorial serif title (Gloock). */
+// Big title in the Gloock font
 @Composable
 fun DisplayTitle(text: String, modifier: Modifier = Modifier, size: TextUnit = 30.sp, color: Color = Ink, align: TextAlign? = null) {
     Text(text, modifier = modifier, color = color, fontFamily = Display, fontSize = size, lineHeight = size * 1.12f, textAlign = align)
 }
 
-/** Cursive accent word in champagne ("world.", "Account"). */
+// Cursive gold word (e.g. 'on you', 'world.')
 @Composable
 fun ScriptWord(text: String, size: TextUnit = 34.sp, modifier: Modifier = Modifier, color: Color = Primary) {
     Text(text, modifier = modifier, color = color, fontFamily = ScriptFont, fontWeight = FontWeight.Bold, fontSize = size)
 }
 
-/** Thin line that fades out at both ends. */
+// Thin gold line that fades out at both ends
 @Composable
 fun Hairline(modifier: Modifier = Modifier) {
     Box(modifier.fillMaxWidth().height(1.dp).background(Brush.horizontalGradient(listOf(Color.Transparent, Gold.copy(alpha = 0.3f), Color.Transparent))))
 }
 
-/** Text tabs with a champagne underline under the selected one. */
+// Text tabs with a gold underline under the selected one
 @Composable
 fun TextTabs(options: List<String>, selected: String, onSelect: (String) -> Unit, modifier: Modifier = Modifier) {
     Row(modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
@@ -255,7 +270,7 @@ fun TextTabs(options: List<String>, selected: String, onSelect: (String) -> Unit
     }
 }
 
-/** Size pill (XS, S, M...). Sold-out sizes are faded and crossed through. */
+// *** SIZE BUTTON *** (XS, S, M...). Sold-out sizes are faded, crossed out and can't be tapped
 @Composable
 fun SizeBox(label: String, selected: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
     Box(
@@ -273,7 +288,7 @@ fun SizeBox(label: String, selected: Boolean, enabled: Boolean = true, onClick: 
     }
 }
 
-/** Round frosted icon button (back, share, heart on photos). */
+// Round see-through icon button (back, share, heart on photos)
 @Composable
 fun GlassCircle(icon: ImageVector, contentDescription: String?, tint: Color = Ink, size: Dp = 40.dp, onClick: () -> Unit) {
     Box(
@@ -282,7 +297,7 @@ fun GlassCircle(icon: ImageVector, contentDescription: String?, tint: Color = In
     ) { Icon(icon, contentDescription = contentDescription, tint = tint, modifier = Modifier.size(size * 0.48f)) }
 }
 
-/** Small frosted chip ("✦ AI Try-On ready"). */
+// Small see-through label with a dot (e.g. 'AI fitted')
 @Composable
 fun GlassChip(text: String, modifier: Modifier = Modifier, dotColor: Color = Primary, onClick: (() -> Unit)? = null) {
     Row(
@@ -297,7 +312,7 @@ fun GlassChip(text: String, modifier: Modifier = Modifier, dotColor: Color = Pri
     }
 }
 
-/** Glass text field colours (used with OutlinedTextField + FieldShape). */
+// Colours for the text boxes (glass fill, gold when typing, red on error)
 @Composable
 fun underlineFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedContainerColor = GlassFill, unfocusedContainerColor = GlassFill, errorContainerColor = GlassFill,

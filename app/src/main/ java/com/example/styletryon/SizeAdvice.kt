@@ -1,3 +1,9 @@
+// =====================================================================
+// SizeAdvice.kt = SIZE SUGGESTION from the user's height + the live camera.
+// Idea: we know the user's height in cm, and the camera tells us the body in PIXELS.
+// Shoulder-to-ankle is about 78% of a person's height -> so we can work out how many cm one pixel is.
+// Then: shoulder width in cm -> top size (XS-XL), hip width in cm -> jeans waist size (28-36).
+// =====================================================================
 package com.example.styletryon
 
 import androidx.compose.ui.geometry.Offset
@@ -14,15 +20,16 @@ import kotlin.math.roundToInt
 //  always shows it as a suggestion, never as a rule.
 // =====================================================================
 
-/** Measured body widths in cm. */
+// The measured shoulder width and hip width in cm
 data class BodySize(val shoulderCm: Float, val hipCm: Float)
 
-/** Frames to average before we show a suggestion (about 2 seconds of camera). */
+// We average 30 camera frames (about 2 seconds) before showing a size, so one bad frame doesn't change it
 const val SIZE_SAMPLES = 30
 
-/** Shoulder-to-ankle length as a part of the full height (adult body proportions). */
+// Shoulder-to-ankle length = 78% of the full height (normal adult body proportions)
 private const val SHOULDER_TO_ANKLE = 0.78f
 
+// Distance from a point to a line (used to ignore the arms when measuring the hips)
 private fun pointToSegment(p: Offset, a: Offset, b: Offset): Float {
     val ab = b - a
     val len2 = ab.x * ab.x + ab.y * ab.y
@@ -34,6 +41,9 @@ private fun pointToSegment(p: Offset, a: Offset, b: Offset): Float {
  * Hip width in pixels: walks left and right from the middle of the hips until it leaves
  * the person's outline (ignoring the arms). Without an outline it guesses from the hip points.
  */
+// *** HIP WIDTH IN PIXELS ***
+// From the middle of the hips, walk left and right until we leave the person's outline (the arms don't count).
+// No outline? Guess 1.6 x the distance between the hip points
 private fun hipWidthPx(body: Body): Float? {
     val hA = body.hipA ?: return null
     val hB = body.hipB ?: return null
@@ -47,6 +57,7 @@ private fun hipWidthPx(body: Body): Float? {
     val arms = body.arms()
     val armRadius = (body.shoulderB - body.shoulderA).getDistance() * 0.12f
     fun inside(p: Offset) = mask.isPerson(p) && arms.none { (a, b) -> pointToSegment(p, a, b) < armRadius }
+    // Walk left and right one pixel at a time
     var left = 0f
     var right = 0f
     val max = d * 3f
@@ -60,6 +71,8 @@ private fun hipWidthPx(body: Body): Float? {
  * Measures one camera frame. [body] must be in camera-image pixels.
  * Returns null unless shoulders, hips and both ankles are visible.
  */
+// *** MEASURES THE BODY IN ONE CAMERA FRAME ***
+// Needs the height and the whole body (shoulders, hips, both ankles) in view, otherwise null
 fun measureBody(body: Body, heightCm: Int): BodySize? {
     if (!Validate.height(heightCm)) return null
     val ankleA = body.ankleA ?: return null
@@ -68,20 +81,25 @@ fun measureBody(body: Body, heightCm: Int): BodySize? {
     val ankles = (ankleA + ankleB) / 2f
     val shoulderToAnkle = (ankles - shoulders).getDistance()
     if (shoulderToAnkle < 80f) return null
+    // STEP 1: how many cm is one pixel? (height x 0.78 / shoulder-to-ankle pixels)
     val cmPerPixel = heightCm * SHOULDER_TO_ANKLE / shoulderToAnkle
     // Shoulder points are the joints; the outside of the shoulders is about 10% wider
+    // STEP 2: shoulder width in cm (+10%, because the points are the joints, not the outside of the shoulders)
     val shoulderCm = (body.shoulderB - body.shoulderA).getDistance() * cmPerPixel * 1.1f
+    // STEP 3: hip width in cm
     val hipCm = (hipWidthPx(body) ?: return null) * cmPerPixel
+    // STEP 4: ignore impossible results (the pose was too odd to trust)
     if (shoulderCm !in 25f..60f || hipCm !in 22f..60f) return null       // pose too odd to trust
     return BodySize(shoulderCm, hipCm)
 }
 
-/** Moves the running average a little towards the new measurement (so it settles, not jumps). */
+// Running average: 90% old + 10% new, so the number settles instead of jumping
 fun averageSize(old: BodySize?, new: BodySize): BodySize =
     if (old == null) new
     else BodySize(old.shoulderCm * 0.9f + new.shoulderCm * 0.1f, old.hipCm * 0.9f + new.hipCm * 0.1f)
 
-/** Chest is roughly 2.45 x shoulder width. Matches our size guide: XS 32", S 34", M 36", L 38", XL 40". */
+// *** TOP SIZE ***
+// Chest ≈ 2.45 x shoulder width, in inches. Then our size guide: XS 32", S 34", M 36", L 38", XL 40"
 fun topSizeFor(shoulderCm: Float): String {
     val chestInches = shoulderCm * 2.45f / 2.54f
     return when {
@@ -93,17 +111,20 @@ fun topSizeFor(shoulderCm: Float): String {
     }
 }
 
-/** Hip circumference is roughly 2.75 x hip width; jeans waist is about 8" less. Rounded to 28-36. */
+// *** JEANS WAIST SIZE ***
+// Hip all the way round ≈ 2.75 x hip width; jeans waist ≈ 8 inches less. Rounded to an even size 28-36
 fun waistSizeFor(hipCm: Float): String {
     val waistInches = hipCm * 2.75f / 2.54f - 8f
     val even = ((waistInches / 2f).roundToInt() * 2).coerceIn(28, 36)
     return even.toString()
 }
 
+// Pants -> waist size, anything else -> top size
 fun recommendedSize(product: Product, size: BodySize): String =
     if (product.type == "PANTS") waistSizeFor(size.hipCm) else topSizeFor(size.shoulderCm)
 
-/** Size advice from the measurements saved in the user's profile, or null if they haven't measured yet. */
+// *** 'YOUR SIZE' ON THE PRODUCT PAGE ***
+// Uses the measurements saved in the user's profile (null if they haven't done the body scan yet)
 fun suggestedSize(product: Product, user: User?): String? =
     if (user == null || user.shoulderCm <= 0f || user.hipCm <= 0f) null
     else recommendedSize(product, BodySize(user.shoulderCm, user.hipCm))

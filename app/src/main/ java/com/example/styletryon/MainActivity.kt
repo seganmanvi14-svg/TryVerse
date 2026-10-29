@@ -1,3 +1,9 @@
+// =====================================================================
+// MainActivity.kt = WHERE THE APP STARTS + NAVIGATION + SHARED DATA.
+// The app has ONE Activity. Every screen is a Compose function, and MainActivity decides which one to show.
+// Navigation = a list (stack) of screen names; the last one is shown, Back removes it.
+// It also loads / saves the logged-in user's cart, wishlist, searches, addresses and outfits (SQLite).
+// =====================================================================
 package com.example.styletryon
 
 import android.app.Activity
@@ -39,11 +45,13 @@ import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderF
 
 // Colours, type and shapes are in Theme.kt (Zara-style design system)
 
+// *** THE APP STARTS HERE ***
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Firebase App Check: only our genuine app may use the AI.
         // Debug builds use a debug token (printed in Logcat), real builds use Google Play Integrity.
+        // Only if Firebase is set up: App Check makes sure only our real app can use the AI
         if (FirebaseApp.getApps(this).isNotEmpty()) {
             Firebase.appCheck.installAppCheckProviderFactory(
                 if (BuildConfig.DEBUG) DebugAppCheckProviderFactory.getInstance()
@@ -51,34 +59,44 @@ class MainActivity : ComponentActivity() {
             )
         }
         // Black (Noir) is the default; the user can switch to light (Home sun icon / Account → Settings)
+        // Use the saved theme (black by default)
         ThemeState.dark = loadThemeChoice(this) ?: true
+        // Draw the app with Compose
         setContent { TryVerseApp() }
     }
 }
 
-/** Screens that show the bottom navigation bar. */
+// Screens that show the bottom bar
 val tabs = listOf("home", "categories", "tryon", "cart", "profile")
 
+// *** THE WHOLE APP ***
 @Composable
 fun TryVerseApp() {
     val context = LocalContext.current
+    // Open the SQLite database once (remember = keep it, don't make a new one every redraw)
     val db = remember { UserDatabase(context) }
 
     // Simple navigation: a list of screen names, the last one is shown
     // Already logged in: open Home straight away; otherwise start on the welcome screen
+    // *** NAVIGATION STACK ***
+    // Already logged in (session.txt + the user exists in the database) -> start on Home, else the welcome
+    // screen
     val stack = remember { mutableStateListOf(if (loadSession(context)?.let { db.getUser(it) } != null) "home" else "splash") }
     val screen = stack.last()
+    // go = open a screen on top. back = close the top screen. openTab = clear everything and open a tab
     fun go(to: String) { stack.add(to) }
     fun back() { if (stack.size > 1) stack.removeAt(stack.lastIndex) }
     fun openTab(to: String) { stack.clear(); stack.add(to) }
-    /** Replaces the try-on steps after "adjust" with the result screen. */
+    // After processing, go to the result and drop the processing screen (so Back goes to Adjust, not processing)
     fun showResult() {
         while (stack.size > 1 && stack.last() != "adjust") stack.removeAt(stack.lastIndex)
         stack.add("result")
     }
+    // The phone's Back button goes to the previous screen
     BackHandler(enabled = stack.size > 1) { back() }
 
     // Shared app state
+    // *** SHARED APP STATE *** (values many screens need). user = who is logged in (null = nobody)
     var user by remember { mutableStateOf(loadSession(context)?.let { db.getUser(it) }) }
     var category by remember { mutableStateOf("All") }
     var filtersFirst by remember { mutableStateOf(false) }             // Home's filter button opens the filters
@@ -97,6 +115,7 @@ fun TryVerseApp() {
     var editingAddress by remember { mutableStateOf<SavedAddress?>(null) } // address open on the map
     var outfits by remember { mutableStateOf(listOf<SavedOutfit>()) }      // saved mix & match outfits
     var liveOutfit by remember { mutableStateOf<SavedOutfit?>(null) }      // outfit opened in the live camera
+    // The cart and the wishlist (when they change, the screens update by themselves)
     val cart = remember { mutableStateListOf<CartItem>() }
     val wishlist = remember { mutableStateListOf<Int>() }
 
@@ -106,7 +125,9 @@ fun TryVerseApp() {
     //  and every change to the cart or wishlist is saved straight away.
     //  So closing the app, or logging out and in again, loses nothing.
     // ---------------------------------------------------------------
+    // *** DATA PER USER ***
     val email = user?.email
+    // Runs when the user logs in / out: empty everything, then load THIS user's data from SQLite
     LaunchedEffect(email) {
         cart.clear()
         wishlist.clear()
@@ -119,6 +140,7 @@ fun TryVerseApp() {
         searches = db.loadSearches(email)
         addresses = db.loadAddresses(email)
         outfits = db.loadOutfits(email)
+        // *** AUTO-SAVE ***: every time the cart or the wishlist changes, save it in SQLite straight away
         snapshotFlow { cart.toList() to wishlist.toList() }.collect { (c, w) ->
             db.saveCart(email, c)
             db.saveWishlist(email, w)
@@ -127,10 +149,12 @@ fun TryVerseApp() {
     // The Home filter button opens the filters only once
     LaunchedEffect(screen) { if (screen != "categories") filtersFirst = false }
 
-    /** Size to add by default: the user's suggested size if it is in stock, otherwise M / 32 (or the first in stock). */
+    // Size to add by default: the user's body-scan size if it is in stock, else M / 32
     fun bestSize(p: Product) = suggestedSize(p, user)?.takeIf { p.hasSize(it) } ?: p.defaultSize()
 
+    // ♡ button: save or unsave a product
     val toggleWish: (Product) -> Unit = { p -> if (wishlist.contains(p.id)) wishlist.remove(p.id) else wishlist.add(p.id) }
+    // *** ADD TO CART ***: refuses sold-out sizes; the same product + size again just adds 1 to the quantity
     val addToCart: (Product, String) -> Unit = { p, s ->
         if (!p.hasSize(s)) {
             Toast.makeText(context, "Sorry, ${p.name} ($s) is out of stock", Toast.LENGTH_SHORT).show()
@@ -140,12 +164,15 @@ fun TryVerseApp() {
             if (i >= 0) cart[i] = cart[i].copy(qty = cart[i].qty + 1) else cart.add(CartItem(p, s))
         }
     }
+    // Shortcuts used by many screens: open a product page, start a try-on, redo a try-on, log in
     val openProduct: (Product) -> Unit = { selected = it; go("detail") }
     val startTryOn: (Product) -> Unit = { tryProduct = it; colorName = null; tint = null; go("tryon") }
     val retry: (Product) -> Unit = { tryProduct = it; colorName = null; tint = null; editBase = null; go("processing") }
+    // Logged in / signed up: remember the user, save the session (stay logged in), go Home
     val loggedIn: (User) -> Unit = { user = it; saveSession(context, it.email); openTab("home") }
 
     // Status and navigation bars follow the theme (black bars with white icons in the black theme)
+    // The phone's top and bottom bars use the theme colours (light icons in the black theme)
     val view = LocalView.current
     val dark = ThemeState.dark
     SideEffect {
@@ -160,19 +187,25 @@ fun TryVerseApp() {
         }
     }
 
+    // Our colours, fonts and shapes for everything inside
     ZaraTheme {
         Scaffold(
             containerColor = Cream,
+            // Bottom bar only on the 5 tab screens
             bottomBar = { if (screen in tabs) NoirBottomBar(screen, cart.sumOf { it.qty }) { openTab(it) } }
         ) { pad ->
             Box(Modifier.padding(pad)) {
+                // *** WHICH SCREEN TO SHOW *** (by the name on top of the stack)
                 when (screen) {
+                    // Welcome screen -> Sign Up or Log In
                     "splash" -> SplashScreen(
                         onStart = { openTab(if (user != null) "home" else "signup") },
                         onLogin = { openTab(if (user != null) "home" else "login") }
                     )
+                    // Sign up and Login (both check the SQLite database)
                     "signup" -> SignUpScreen(db = db, onSignedUp = loggedIn, onLogin = { go("login") })
                     "login" -> LoginScreen(db = db, onLoggedIn = loggedIn, onSignUp = { openTab("signup") })
+                    // Home
                     "home" -> HomeScreen(
                         userName = user?.name ?: "there",
                         wishlist = wishlist, onWish = toggleWish, onProduct = openProduct,
@@ -180,6 +213,7 @@ fun TryVerseApp() {
                         onShopNow = { startTryOn(catalog[1]) },
                         onFilters = { category = "All"; filtersFirst = true; openTab("categories") }
                     )
+                    // Categories with search; searches are saved per user in SQLite
                     "categories" -> CategoriesScreen(
                         category, { category = it }, wishlist, toggleWish, openProduct,
                         history = searches,
@@ -188,6 +222,7 @@ fun TryVerseApp() {
                         startWithFilters = filtersFirst
                     )
                     "saved" -> SavedScreen(wishlist, toggleWish, openProduct, onBack = { back() })
+                    // Product page (with 'your size' from the body scan)
                     "detail" -> ProductDetailScreen(
                         product = selected,
                         wishlisted = wishlist.contains(selected.id),
@@ -197,6 +232,7 @@ fun TryVerseApp() {
                         onTry = { startTryOn(selected) },
                         yourSize = suggestedSize(selected, user)
                     )
+                    // Try-on start: live camera, upload a photo, or a sample model
                     "tryon" -> TryOnUploadScreen(
                         product = tryProduct,
                         onProduct = { tryProduct = it },
@@ -204,6 +240,7 @@ fun TryVerseApp() {
                         onLive = { liveOutfit = null; go("live") },
                         onPhoto = { photo = it; go("adjust") }
                     )
+                    // Live camera try-on. Height, body measurements, captures and outfits are saved for the user
                     "live" -> LiveTryOnScreen(
                         startProduct = tryProduct,
                         onClose = { back() },
@@ -226,11 +263,13 @@ fun TryVerseApp() {
                             }
                         }
                     )
+                    // Adjust the photo, then processing
                     "adjust" -> AdjustPhotoScreen(
                         photo = photo!!,
                         onRetake = { back() },
                         onContinue = { cropped = it; colorName = null; tint = null; editBase = null; go("processing") }
                     )
+                    // Makes the try-on picture; the result is also saved in the Try-On History
                     "processing" -> ProcessingScreen(
                         base = editBase ?: cropped!!,
                         person = cropped!!,
@@ -245,11 +284,33 @@ fun TryVerseApp() {
                         },
                         onFail = { back() }
                     )
+                    // *** RESULT + MIX & MATCH ***
+                    // person = the clean photo, so a second garment can be drawn on it
                     "result" -> ResultScreen(
                         look = look!!, madeByAi = madeByAi, product = tryProduct,
+                        person = cropped,
+                        // Mix & match: add the whole outfit (each item in the user's best size)
+                        // Add the whole mix & match outfit to the cart (each in the user's best size), then open
+                        // the cart
+                        onAddOutfit = { items ->
+                            val (ok, soldOut) = items.partition { it.inStock }
+                            ok.forEach { addToCart(it, bestSize(it)) }
+                            val msg = if (soldOut.isEmpty()) "Outfit added to cart" else "Added. Out of stock: " + soldOut.joinToString { it.name }
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                            if (ok.isNotEmpty()) openTab("cart")
+                        },
+                        // Save the outfit to My Outfits in SQLite (only when logged in)
+                        onSaveOutfit = user?.let { u ->
+                            { items: List<Product> ->
+                                db.saveOutfit(u.email, "Outfit ${outfits.size + 1}", items.map { it to bestSize(it) })
+                                outfits = db.loadOutfits(u.email)
+                                Toast.makeText(context, "Saved to My Outfits", Toast.LENGTH_SHORT).show()
+                            }
+                        },
                         onProduct = retry,
                         onBack = { back() },
                         onCompare = { go("compare") },
+                        // Add the single item, then show 'Complete Your Look'
                         onAddToCart = {
                             if (tryProduct.inStock) {
                                 addToCart(tryProduct, bestSize(tryProduct))
@@ -260,6 +321,7 @@ fun TryVerseApp() {
                             }
                         }
                     )
+                    // Compare + Try Another Colour (makes a new try-on in that colour)
                     "compare" -> CompareScreen(
                         photo = cropped!!, look = look!!, product = tryProduct, colorName = colorName,
                         onColor = { name, c ->
@@ -276,6 +338,7 @@ fun TryVerseApp() {
                         onBack = { back() },
                         onCart = { openTab("cart") }
                     )
+                    // Cart -> checkout -> payment -> Order Details
                     "cart" -> CartScreen(
                         cart, userName = user?.name ?: "", onBack = { openTab("home") },
                         email = user?.email ?: "", phone = user?.phone ?: "",
@@ -283,6 +346,7 @@ fun TryVerseApp() {
                         addresses = addresses,
                         onAddAddress = { editingAddress = null; go("map") }
                     )
+                    // Order details; Buy again puts the same items back in the cart
                     "order" -> OrderDetailsScreen(
                         order = openOrder!!,
                         onBack = { back() },
@@ -293,6 +357,7 @@ fun TryVerseApp() {
                             openTab("cart")
                         }
                     )
+                    // Try-On History and My Outfits (rename / delete are saved in SQLite)
                     "history" -> TryOnHistoryScreen(db, user?.email ?: "", onBack = { back() }, onProduct = openProduct)
                     "outfits" -> OutfitsScreen(
                         outfits = outfits,
@@ -306,6 +371,7 @@ fun TryVerseApp() {
                         onRename = { o, name -> user?.let { db.renameOutfit(it.email, o.id, name); outfits = db.loadOutfits(it.email) } },
                         onDelete = { o -> user?.let { db.deleteOutfit(it.email, o.id); outfits = db.loadOutfits(it.email) } }
                     )
+                    // My Addresses and the Google Maps picker; addresses are saved per user in SQLite
                     "addresses" -> AddressListScreen(
                         addresses = addresses,
                         onBack = { back() },
@@ -322,6 +388,7 @@ fun TryVerseApp() {
                             back()
                         }
                     )
+                    // Profile (the default)
                     else -> ProfileScreen(
                         db = db,
                         user = user,
@@ -332,6 +399,8 @@ fun TryVerseApp() {
                         outfitCount = outfits.size,
                         onOutfits = { go("outfits") },
                         onUserChanged = { user = it },
+                        // *** LOG OUT ***: delete session.txt and forget the user. Their data stays in SQLite
+                        // for next time
                         onLogout = {
                             clearSession(context)
                             ShopState.reset()
@@ -350,6 +419,7 @@ fun TryVerseApp() {
 /**
  * Noir bottom bar: Home, Categories, a raised round Try-On button with a champagne ring, Cart (with count), Profile.
  */
+// *** BOTTOM BAR ***: Home, Categories, the raised round Try-On button, Cart (with the item count), Profile
 @Composable
 fun NoirBottomBar(screen: String, cartCount: Int, onTab: (String) -> Unit) {
     val labels = listOf("Home", "Categories", "Try-On", "Cart", "Profile")

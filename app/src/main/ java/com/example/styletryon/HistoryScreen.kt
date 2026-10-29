@@ -1,3 +1,8 @@
+// =====================================================================
+// HistoryScreen.kt = TRY-ON HISTORY (file handling + SQLite).
+// Every try-on picture is saved as a JPEG file in the app's private folder (filesDir/looks),
+// and its path is saved in the SQLite 'looks' table with the user's email. This screen shows them in a grid.
+// =====================================================================
 package com.example.styletryon
 
 import android.content.Context
@@ -34,29 +39,35 @@ import java.io.File
 //  "looks" table for the logged-in user. Other apps cannot read this folder.
 // =====================================================================
 
-/** Saves a look into the history. Pictures are made smaller (max 900 px) to save space. */
+// *** SAVES A TRY-ON PICTURE INTO THE HISTORY *** (called after a photo try-on or a live capture)
 fun saveLookToHistory(context: Context, db: UserDatabase, email: String, look: Bitmap, productId: Int) {
     if (email.isEmpty()) return
     try {
+        // STEP 1: make the picture smaller (max 900 px) to save space
         val scale = minOf(1f, 900f / maxOf(look.width, look.height))
         val small = if (scale < 1f) Bitmap.createScaledBitmap(look, (look.width * scale).toInt(), (look.height * scale).toInt(), true) else look
+        // STEP 2: save it as look_<time>.jpg in the private 'looks' folder (other apps can't read it)
         val folder = File(context.filesDir, "looks").apply { mkdirs() }
         val file = File(folder, "look_${System.currentTimeMillis()}.jpg")
         file.outputStream().use { small.compress(Bitmap.CompressFormat.JPEG, 88, it) }
+        // STEP 3: remember the file path in SQLite for this user
         db.addLook(email, file.absolutePath, productId)
     } catch (e: Exception) {
         // History is a nice extra; never crash the try-on because of it
     }
 }
 
+// *** TRY-ON HISTORY SCREEN ***
 @Composable
 fun TryOnHistoryScreen(db: UserDatabase, email: String, onBack: () -> Unit, onProduct: (Product) -> Unit) {
     val context = LocalContext.current
+    // This user's pictures (newest first), and the one opened big (null = none)
     var looks by remember(email) { mutableStateOf(db.loadLooks(email)) }
     var open by remember { mutableStateOf<SavedLook?>(null) }
 
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         TopBar("Try-On History", onBack)
+        // No pictures yet: show a message
         if (looks.isEmpty()) {
             Column(Modifier.fillMaxWidth().padding(top = 80.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(Icons.Default.PhotoLibrary, contentDescription = null, tint = Primary, modifier = Modifier.size(44.dp))
@@ -66,6 +77,7 @@ fun TryOnHistoryScreen(db: UserDatabase, email: String, onBack: () -> Unit, onPr
             }
         } else {
             Text("${looks.size} LOOKS", color = Muted, fontSize = 11.sp, letterSpacing = 1.sp, modifier = Modifier.padding(start = 4.dp, bottom = 10.dp))
+            // A grid with 2 columns; only the pictures on screen are drawn
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -86,6 +98,7 @@ fun TryOnHistoryScreen(db: UserDatabase, email: String, onBack: () -> Unit, onPr
     }
 
     // Big view of one look: share, delete or open the product
+    // Big view of one picture with SHARE, VIEW ITEM and DELETE
     open?.let { look ->
         val product = productById(look.productId)
         AlertDialog(
@@ -94,12 +107,14 @@ fun TryOnHistoryScreen(db: UserDatabase, email: String, onBack: () -> Unit, onPr
             text = { LookImage(look.path, Modifier.fillMaxWidth().aspectRatio(0.75f)) },
             confirmButton = {
                 Row {
+                    // SHARE opens the phone's share menu
                     TextButton(onClick = {
                         BitmapFactory.decodeFile(look.path)?.let { shareLook(context, it) }
                     }) { Text("SHARE", letterSpacing = 1.sp) }
                     if (product != null) TextButton(onClick = { open = null; onProduct(product) }) { Text("VIEW ITEM", letterSpacing = 1.sp) }
                 }
             },
+            // DELETE removes the file AND the row in SQLite
             dismissButton = {
                 TextButton(onClick = {
                     File(look.path).delete()
@@ -113,7 +128,7 @@ fun TryOnHistoryScreen(db: UserDatabase, email: String, onBack: () -> Unit, onPr
     }
 }
 
-/** A saved look from the app's files (decoded at half size for the grid). */
+// Loads a saved picture from its file at half size (faster for the grid). Grey box if the file is missing
 @Composable
 fun LookImage(path: String, modifier: Modifier = Modifier) {
     val image = remember(path) {
