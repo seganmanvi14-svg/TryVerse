@@ -80,6 +80,7 @@ returns / exchanges and delivery addresses on a map.
 - **Razorpay test mode:** add `RAZORPAY_KEY=rzp_test_...` to `local.properties`.
 
 ### Test payment details
+
 | Method | Use |
 |---|---|
 | Google Pay (test) | Any card shown in the Google Pay sheet; no money moves |
@@ -94,7 +95,7 @@ On an **emulator**, Google Pay usually returns **error 412**, because the emulat
 ## Project structure
 
 ```
-app/src/main/ java/com/example/styletryon/
+app/src/main/java/com/example/styletryon/
 ├── MainActivity.kt        App start, navigation, per-user data
 ├── AuthScreens.kt         Welcome, sign up, login, forgot password
 ├── UserDatabase.kt        SQLite database, password hashing, input checks, session
@@ -124,6 +125,7 @@ Every Kotlin file has comments explaining what each part does.
 | Member | Name |
 |---|---|
 | Member 2 | Manvi Segan (N146) |
+| Member 3 | Maanya Oberoi (N144) |
 
 See the commit history for each member's work.
 
