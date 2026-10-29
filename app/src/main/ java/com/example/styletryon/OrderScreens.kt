@@ -1,3 +1,9 @@
+// =====================================================================
+// OrderScreens.kt = ORDER DETAILS screen (opened by tapping an order in Profile, or right after buying).
+// Shows: order number + status + tracking timeline, the items, delivery address and date,
+// payment (method + payment id) and the price summary. Buttons: Cancel order, Buy again,
+// and Return / Exchange for each item (within 7 days of delivery). Changes are saved in orders.csv.
+// =====================================================================
 package com.example.styletryon
 
 import android.widget.Toast
@@ -23,18 +29,23 @@ import androidx.compose.ui.unit.sp
 //  ORDER DETAILS (opened by tapping an order in My Profile)
 // =====================================================================
 
-/** [suggestSize] = the user's size from the body scan (shown when exchanging a size). */
+// *** ORDER DETAILS SCREEN ***
+// [suggestSize] = the user's size from the body scan (shown with a star when exchanging a size)
 @Composable
 fun OrderDetailsScreen(
     order: Order, onBack: () -> Unit, onProduct: (Product) -> Unit,
     onBuyAgain: (Order) -> Unit = {}, suggestSize: (Product) -> String? = { null }
 ) {
     val context = LocalContext.current
+    // current = the order as shown now (changes when the user cancels or asks for a return)
     var current by remember(order.id) { mutableStateOf(order) }
+    // confirmCancel = show the 'Cancel this order?' box. returning = which item is being returned (null = none)
     var confirmCancel by remember { mutableStateOf(false) }
     var returning by remember { mutableStateOf<Int?>(null) }     // item being returned / exchanged
+    // Processing / Shipped / Delivered / Cancelled (worked out from the time, see Orders.kt)
     val status = current.status
     // Saved as "Label: address" (orders from before Maps only have the label)
+    // The address is saved as "Label: address", so split it into the label (Home) and the address text
     val addressLabel = current.address.substringBefore(":")
     val addressText = current.address.substringAfter(": ", defaultAddresses.firstOrNull { it.label == current.address }?.line ?: "")
 
@@ -42,6 +53,7 @@ fun OrderDetailsScreen(
         TopBar("Order Details", onBack)
 
         // Order number, date and status
+        // CARD 1: order number, date, number of items, status, and the tracking timeline
         Section {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -55,6 +67,7 @@ fun OrderDetailsScreen(
         }
 
         // Items
+        // CARD 2: the items. Tapping an item opens its product page
         Section {
             Eyebrow("Items")
             current.lines.forEachIndexed { i, line ->
@@ -68,6 +81,9 @@ fun OrderDetailsScreen(
                         Text(line.product.name.uppercase(), color = Ink, fontSize = 12.sp, letterSpacing = 0.8.sp)
                         Text("${line.product.colorName}  ·  Size ${line.size}  ·  Qty ${line.qty}", color = Muted, fontSize = 12.sp)
                         // Return / exchange (within 7 days of delivery, once per item)
+                        // *** RETURN / EXCHANGE ***
+                        // Already asked: show its progress. Not yet, and still allowed (7 days): show the RETURN
+                        // / EXCHANGE link
                         val request = current.requestFor(i)
                         when {
                             request != null -> Text(request.progress(current).uppercase(), color = Ink, fontSize = 11.sp, letterSpacing = 1.sp)
@@ -83,6 +99,7 @@ fun OrderDetailsScreen(
         }
 
         // Delivery
+        // CARD 3: delivery address and date
         Section {
             Eyebrow("Delivery")
             Spacer(Modifier.height(4.dp))
@@ -96,6 +113,8 @@ fun OrderDetailsScreen(
                 InfoRow(Icons.Default.AssignmentReturn, "Easy returns", "Return or exchange any item within 7 days of delivery")
             }
             // Demo helper for the viva (debug builds only): orders normally arrive on the chosen date
+            // DEMO button (only in debug builds): marks the order as delivered now, so returns can be shown in
+            // the viva
             if (BuildConfig.DEBUG && (status == "Processing" || status == "Shipped")) {
                 TextButton(onClick = {
                     markDelivered(context, current.id)
@@ -105,11 +124,13 @@ fun OrderDetailsScreen(
         }
 
         // Payment and price
+        // CARD 4: payment method + payment id, and the price summary (items, coupon, delivery, total)
         Section {
             Eyebrow("Payment")
             Spacer(Modifier.height(4.dp))
+            // Card icon for online payments, cash icon for Cash on Delivery. Payment ID comes from Google Pay
             InfoRow(
-                if (current.payment == "Razorpay") Icons.Default.CreditCard else Icons.Default.Payments,
+                if (current.payment != "Cash on Delivery") Icons.Default.CreditCard else Icons.Default.Payments,
                 current.payment,
                 if (current.paymentId != "-") "Payment ID: ${current.paymentId}" else "Pay when the order arrives"
             )
@@ -117,10 +138,11 @@ fun OrderDetailsScreen(
             PriceRow("Items total", rupees(current.subtotal))
             if (current.subtotal > current.total) PriceRow("Coupon discount", "– " + rupees(current.subtotal - current.total))
             PriceRow("Delivery", "FREE")
-            PriceRow(if (current.payment == "Razorpay") "Total paid" else "Total to pay", rupees(current.total), bold = true)
+            PriceRow(if (current.payment != "Cash on Delivery") "Total paid" else "Total to pay", rupees(current.total), bold = true)
         }
 
         Spacer(Modifier.height(16.dp))
+        // Cancel order (only while Processing) and Buy again (puts the same items back in the cart)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (status == "Processing") {
                 ZaraOutlinedButton("Cancel order", Modifier.weight(1f)) { confirmCancel = true }
@@ -130,11 +152,13 @@ fun OrderDetailsScreen(
         Spacer(Modifier.height(16.dp))
     }
 
+    // Return / exchange box for item number i
     returning?.let { i ->
         ReturnDialog(
             order = current, index = i, suggested = suggestSize(current.lines[i].product),
             onDismiss = { returning = null },
             onSubmit = { request ->
+                // *** RETURN / EXCHANGE IS SAVED HERE (in orders.csv) ***
                 requestReturn(context, current.id, request)        // saved in orders.csv
                 current = current.copy(requests = current.requests + request)
                 returning = null
@@ -143,18 +167,21 @@ fun OrderDetailsScreen(
         )
     }
 
+    // *** CANCEL ORDER BOX ***
+    // Online payments are refunded; Cash on Delivery has nothing to pay
     if (confirmCancel) {
         AlertDialog(
             onDismissRequest = { confirmCancel = false },
             title = { Text("Cancel this order?") },
             text = {
                 Text(
-                    if (current.payment == "Razorpay") "${rupees(current.total)} will be refunded to your original payment method in 5–7 days."
+                    if (current.payment != "Cash on Delivery") "${rupees(current.total)} will be refunded to your original payment method in 5–7 days."
                     else "You won't be charged anything."
                 )
             },
             confirmButton = {
                 TextButton(onClick = {
+                    // *** ORDER IS CANCELLED HERE (orders.csv is updated) ***
                     cancelOrder(context, current.id)           // updates orders.csv
                     current = current.copy(state = "Cancelled")
                     confirmCancel = false
@@ -170,14 +197,18 @@ fun OrderDetailsScreen(
  * Return or exchange one item: pick a reason, then either a new size (sizes in stock only,
  * ★ = the size suggested by the body scan) or a refund.
  */
+// Return or exchange ONE item
 @Composable
 fun ReturnDialog(order: Order, index: Int, suggested: String?, onDismiss: () -> Unit, onSubmit: (ReturnRequest) -> Unit) {
     val line = order.lines[index]
+    // Reasons to choose from
     val reasons = listOf("Too small", "Too big", "Didn't like the colour", "Damaged or defective")
+    // Other sizes of the product; exchange is possible only if at least one of them is in stock
     val options = line.product.sizes.filter { it != line.size }                 // other sizes
     val canExchange = options.any { line.product.hasSize(it) }
     var reason by remember { mutableStateOf(reasons[0]) }
     var exchange by remember { mutableStateOf(canExchange) }
+    // The new size starts as the body-scan size (if in stock), else the first size in stock
     var newSize by remember {
         mutableStateOf(suggested?.takeIf { it in options && line.product.hasSize(it) } ?: options.firstOrNull { line.product.hasSize(it) } ?: "")
     }
@@ -198,6 +229,7 @@ fun ReturnDialog(order: Order, index: Int, suggested: String?, onDismiss: () -> 
                 }
                 Spacer(Modifier.height(10.dp))
                 Eyebrow("Reason")
+                // Radio buttons for the reason
                 reasons.forEach { r ->
                     Row(Modifier.fillMaxWidth().clickable { reason = r }, verticalAlignment = Alignment.CenterVertically) {
                         RadioButton(selected = reason == r, onClick = { reason = r })
@@ -205,10 +237,12 @@ fun ReturnDialog(order: Order, index: Int, suggested: String?, onDismiss: () -> 
                     }
                 }
                 Eyebrow("What would you like?", Modifier.padding(top = 8.dp, bottom = 4.dp))
+                // Choose: Exchange size or Return for refund
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(selected = doExchange, onClick = { exchange = true }, enabled = canExchange, label = { Text("Exchange size") })
                     FilterChip(selected = !doExchange, onClick = { exchange = false }, label = { Text("Return for refund") })
                 }
+                // Exchange: size boxes (sold-out sizes are crossed out, ★ = your body-scan size)
                 if (doExchange) {
                     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         options.forEach { s ->
@@ -218,9 +252,10 @@ fun ReturnDialog(order: Order, index: Int, suggested: String?, onDismiss: () -> 
                     if (suggested != null) Text("★ = your size from the body scan", color = Muted, fontSize = 11.sp)
                     Text("Free pickup. Your new size is delivered when we collect this one.", color = Muted, fontSize = 12.sp)
                 } else {
+                    // Return: shows how much money comes back for this item
                     Text("Refund: ${rupees(order.refundFor(index))}", fontWeight = FontWeight.Bold, color = Ink)
                     Text(
-                        if (order.payment == "Razorpay") "Back to your original payment method 5–7 days after pickup."
+                        if (order.payment != "Cash on Delivery") "Back to your original payment method 5–7 days after pickup."
                         else "To your bank account after pickup (we'll ask for the details).",
                         color = Muted, fontSize = 12.sp
                     )
@@ -228,6 +263,7 @@ fun ReturnDialog(order: Order, index: Int, suggested: String?, onDismiss: () -> 
             }
         },
         confirmButton = {
+            // Sends the request: item number, Exchange / Return, new size, reason, time
             ZaraButton(if (doExchange) "Request exchange" else "Request return") {
                 if (doExchange && newSize.isEmpty()) return@ZaraButton
                 onSubmit(
@@ -239,12 +275,13 @@ fun ReturnDialog(order: Order, index: Int, suggested: String?, onDismiss: () -> 
     )
 }
 
-/** One part of the screen in a rounded glass card. */
+// One rounded glass card. content = whatever is put inside the { }
 @Composable
 fun Section(content: @Composable ColumnScope.() -> Unit) {
     Column(Modifier.fillMaxWidth().padding(vertical = 6.dp).glass(CardShape).padding(16.dp), content = content)
 }
 
+// An icon with a title and a small line of detail under it
 @Composable
 fun InfoRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, detail: String) {
     Row(Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -257,6 +294,7 @@ fun InfoRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String
     }
 }
 
+// One line of the price summary: label on the left, amount on the right
 @Composable
 fun PriceRow(label: String, value: String, bold: Boolean = false) {
     Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
@@ -265,7 +303,8 @@ fun PriceRow(label: String, value: String, bold: Boolean = false) {
     }
 }
 
-/** Ordered -> Shipped -> Delivered, with ticks for the steps already done. */
+// *** TRACKING TIMELINE ***
+// Order placed -> Shipped -> Delivered, with a tick for the steps already done
 @Composable
 fun OrderTimeline(order: Order) {
     if (order.status == "Cancelled") {
@@ -276,6 +315,7 @@ fun OrderTimeline(order: Order) {
         }
         return
     }
+    // How many steps are done: Processing = 1, Shipped = 2, Delivered = 3
     val done = when (order.status) {
         "Delivered" -> 3
         "Shipped" -> 2
@@ -286,6 +326,7 @@ fun OrderTimeline(order: Order) {
         "Shipped" to if (done >= 2) "On the way" else "Usually within a day",
         "Delivered" to (if (done >= 3) "Delivered on " else "Expected on ") + formatDate(order.deliverOn)
     )
+    // Draw each step: tick or empty circle, a line to the next step, and the step's text
     steps.forEachIndexed { i, (title, detail) ->
         Row {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {

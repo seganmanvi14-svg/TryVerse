@@ -1,3 +1,10 @@
+// =====================================================================
+// CartProfileScreens.kt = CART, CHECKOUT and PROFILE screens.
+// Cart -> Proceed to Buy -> Checkout box (address, delivery date, payment) ->
+//    Pay online: Google Pay (PaymentActivity) -> the order is saved ONLY if the payment worked
+//    Cash on Delivery: the order is saved straight away
+// Profile: user details, settings menu (edit profile, change password...), tiles, and My Orders.
+// =====================================================================
 package com.example.styletryon
 
 import android.app.Activity
@@ -32,9 +39,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.Calendar
 
-val payments = listOf("Pay online (UPI / Card / Netbanking)", "Cash on Delivery")
+// The two payment choices shown at checkout. payments[0] = online, payments[1] = cash
+val payments = listOf("Pay online (Google Pay / Card)", "Cash on Delivery")
 
-/** An order waiting for Razorpay to say the payment worked. */
+// An order that is WAITING for the online payment. It is only saved after Google Pay says 'paid'
 private class PendingOrder(val items: List<CartItem>, val total: Int, val address: String, val deliverOn: Long)
 
 // ---------------------------------------------------------------------
@@ -45,6 +53,9 @@ private class PendingOrder(val items: List<CartItem>, val total: Int, val addres
  * The cart lives in MainActivity and is saved in SQLite for the logged-in user,
  * so it is still there after the app is closed.
  */
+// *** CART SCREEN ***
+// cart = the items (kept in MainActivity and saved in SQLite for this user). email / phone go to the payment
+// screen
 @Composable
 fun CartScreen(
     cart: MutableList<CartItem>,
@@ -57,16 +68,20 @@ fun CartScreen(
     onAddAddress: () -> Unit = {}                         // opens the map to add one
 ) {
     val context = LocalContext.current
+    // pending = the order waiting for payment. coupon / discountPercent = the coupon code. showCheckout = show
+    // the checkout box
     var pending by remember { mutableStateOf<PendingOrder?>(null) }
     var coupon by remember { mutableStateOf("") }
     var discountPercent by remember { mutableIntStateOf(0) }
     var showCheckout by remember { mutableStateOf(false) }
+    // Only TICKED items are bought. total = subtotal minus the coupon discount
     val subtotal = cart.filter { it.checked }.sumOf { it.product.price * it.qty }
     val total = subtotal - subtotal * discountPercent / 100
 
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp)) {
             TopBar("My Cart (${cart.size})", onBack)
+            // Empty cart: show a message
             if (cart.isEmpty()) {
                 Column(Modifier.fillMaxWidth().padding(top = 80.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Default.ShoppingCart, contentDescription = null, tint = Primary, modifier = Modifier.size(60.dp))
@@ -75,8 +90,11 @@ fun CartScreen(
                 }
             } else {
                 // Items with check boxes
+                // One row per item: tick box, photo, name, colour | size, price, + / - quantity, delete button
                 cart.forEachIndexed { i, item ->
                     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        // Tick / untick the item. cart[i] = item.copy(...) replaces the item, so the screen
+                        // updates
                         Checkbox(checked = item.checked, onCheckedChange = { cart[i] = item.copy(checked = it) })
                         ProductImage(item.product, Modifier.size(64.dp, 76.dp), padding = 6)
                         Spacer(Modifier.width(10.dp))
@@ -86,9 +104,11 @@ fun CartScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(rupees(item.product.price), fontWeight = FontWeight.Bold, color = Ink)
                                 Spacer(Modifier.weight(1f))
+                                // + / - buttons change how many
                                 QuantityStepper(item.qty, onChange = { cart[i] = item.copy(qty = it) })
                             }
                         }
+                        // Remove the item from the cart
                         IconButton(onClick = { cart.removeAt(i) }) { Icon(Icons.Default.Delete, contentDescription = "Remove", tint = Muted) }
                     }
                     HorizontalDivider(color = Color(0xFFECECF4))
@@ -105,6 +125,7 @@ fun CartScreen(
                         modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp),
                         colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = Paper, focusedContainerColor = Paper)
                     )
+                    // *** COUPON: TRYVERSE10 gives 10% off, any other code is invalid ***
                     TextButton(onClick = {
                         discountPercent = if (coupon.trim() == "TRYVERSE10") 10 else 0
                         Toast.makeText(context, if (discountPercent > 0) "Coupon applied: 10% off" else "Invalid coupon", Toast.LENGTH_SHORT).show()
@@ -115,11 +136,13 @@ fun CartScreen(
         }
 
         // Bottom bar
+        // Bottom bar with the TOTAL and the Proceed to Buy button
         if (cart.isNotEmpty()) {
             Column(Modifier.fillMaxWidth().background(Paper).padding(16.dp)) {
                 Text("Total", color = Muted, fontSize = 12.sp)
                 Text(rupees(total), fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Ink)
                 Spacer(Modifier.height(8.dp))
+                // At least one item must be ticked, then the checkout box opens
                 PrimaryButton("Proceed to Buy", Modifier.fillMaxWidth(), Icons.Default.ArrowForward) {
                     if (cart.none { it.checked }) Toast.makeText(context, "Tick at least one item", Toast.LENGTH_SHORT).show()
                     else showCheckout = true
@@ -129,6 +152,8 @@ fun CartScreen(
     }
 
     // Saves the order to orders.csv and empties those items from the cart
+    // *** ORDER IS PLACED HERE ***
+    // Saves the order in orders.csv (Orders.kt), removes those items from the cart, and opens the order details
     fun placeOrder(p: PendingOrder, payment: String, paymentId: String) {
         val order = saveOrder(context, email, p.items, p.total, p.address, p.deliverOn, payment, paymentId)
         cart.removeAll(p.items)
@@ -136,18 +161,26 @@ fun CartScreen(
         onOrderPlaced(order)
     }
 
-    // Result from Razorpay (PaymentActivity)
+    // Result from the payment screen (Google Pay or Razorpay)
+    // *** RESULT FROM GOOGLE PAY COMES BACK HERE ***
+    // When PaymentActivity closes, this runs with its result
     val payLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val p = pending
         pending = null
+        // PAID: save the order with the method (Google Pay / UPI (test) / Card (test)) and the payment id
         if (p != null && result.resultCode == Activity.RESULT_OK) {
-            placeOrder(p, "Razorpay", result.data?.getStringExtra(Payment.EXTRA_PAYMENT_ID) ?: "")
+            placeOrder(
+                p, result.data?.getStringExtra(Payment.EXTRA_METHOD) ?: Payment.provider,
+                result.data?.getStringExtra(Payment.EXTRA_PAYMENT_ID) ?: ""
+            )
         } else {
+            // NOT paid (cancelled or failed): show why. Nothing is saved and the cart stays the same
             val error = result.data?.getStringExtra(Payment.EXTRA_ERROR) ?: "Payment cancelled."
             Toast.makeText(context, "$error Your cart is unchanged.", Toast.LENGTH_LONG).show()
         }
     }
 
+    // The checkout box
     if (showCheckout) {
         CheckoutDialog(
             userName = userName,
@@ -156,19 +189,19 @@ fun CartScreen(
             onAddAddress = { showCheckout = false; onAddAddress() },
             onDismiss = { showCheckout = false },
             onPlace = { address, deliverOn, payment ->
+                // Make the order from the ticked items, the total, the chosen address and delivery date
                 val p = PendingOrder(cart.filter { it.checked }, total, address, deliverOn)
+                // PAY ONLINE: remember the order as 'pending' and open the payment screen (Google Pay)
                 if (payment == payments[0]) {
-                    // Online: open Razorpay; the order is saved only after the payment succeeds
-                    if (!Payment.isSetUp) {
-                        Toast.makeText(context, "Online payment isn't set up yet. Please choose Cash on Delivery.", Toast.LENGTH_LONG).show()
-                        return@CheckoutDialog
-                    }
+                    // Online: open the payment sheet; the order is saved only after the payment succeeds
                     showCheckout = false
                     pending = p
                     val description = "${p.items.sumOf { it.qty }} item(s) from TryVerse"
+                    // *** OPENS THE PAYMENT SCREEN (PaymentActivity in Payment.kt) ***
                     payLauncher.launch(Payment.intent(context, total, userName, email, phone, description))
                 } else {
                     showCheckout = false
+                    // CASH ON DELIVERY: save the order straight away (no payment id)
                     placeOrder(p, "Cash on Delivery", "-")
                 }
             }
@@ -180,12 +213,15 @@ fun CartScreen(
  * Pop-up with address (radio), delivery date (Date Picker) and payment (radio).
  * onPlace(address name, delivery date in milliseconds, payment method)
  */
+// *** CHECKOUT BOX ***
+// The user picks: the delivery address (saved addresses), the delivery date (calendar), and how to pay
 @Composable
 fun CheckoutDialog(
     userName: String, total: Int, onDismiss: () -> Unit, onPlace: (String, Long, String) -> Unit,
     addresses: List<SavedAddress> = defaultAddresses, onAddAddress: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    // Which address (its number in the list), which payment, and the delivery date (0 = not chosen yet)
     var address by remember { mutableIntStateOf(0) }
     var payment by remember { mutableStateOf(payments[0]) }
     var deliverOn by remember { mutableLongStateOf(0L) }
@@ -197,6 +233,7 @@ fun CheckoutDialog(
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text("Deliver to $userName", fontWeight = FontWeight.SemiBold)
                 if (addresses.isEmpty()) Text("No saved address yet", color = Rose, fontSize = 13.sp)
+                // One radio button per saved address
                 addresses.forEachIndexed { i, a ->
                     Row(Modifier.fillMaxWidth().clickable { address = i }, verticalAlignment = Alignment.CenterVertically) {
                         RadioButton(selected = address == i, onClick = { address = i })
@@ -206,12 +243,15 @@ fun CheckoutDialog(
                         }
                     }
                 }
+                // 'Add new address on map' opens the Google Maps address screen
                 TextButton(onClick = onAddAddress) {
                     Icon(Icons.Default.AddLocationAlt, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
                     Text("Add new address on map")
                 }
                 Text("Delivery date", fontWeight = FontWeight.SemiBold)
+                // *** DELIVERY DATE PICKER ***
+                // Opens Android's calendar. The earliest date allowed is 2 days from today
                 OutlinedButton(onClick = {
                     val c = Calendar.getInstance()
                     c.add(Calendar.DAY_OF_MONTH, 2)                 // earliest delivery: in 2 days
@@ -227,22 +267,25 @@ fun CheckoutDialog(
                 }
                 Spacer(Modifier.height(8.dp))
                 Text("Payment method", fontWeight = FontWeight.SemiBold)
+                // Radio buttons: Pay online (Google Pay / Card) or Cash on Delivery
                 payments.forEach { option ->
                     Row(Modifier.fillMaxWidth().clickable { payment = option }, verticalAlignment = Alignment.CenterVertically) {
                         RadioButton(selected = payment == option, onClick = { payment = option })
                         Text(option, fontSize = 14.sp)
                     }
                 }
+                // For online payment, show that it is secured by Google Pay and is TEST mode (no real money)
                 if (payment == payments[0]) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFF2E8B57), modifier = Modifier.size(14.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("Secured by Razorpay (test mode: no real money is charged)", fontSize = 11.sp, color = Muted)
+                        Text("Secured by ${Payment.provider} (test mode: no real money is charged)", fontSize = 11.sp, color = Muted)
                     }
                 }
             }
         },
         confirmButton = {
+            // Pay / Place Order button: a date and an address must be chosen first
             Button(onClick = {
                 if (deliverOn == 0L) Toast.makeText(context, "Please choose a delivery date", Toast.LENGTH_SHORT).show()
                 else if (address !in addresses.indices) Toast.makeText(context, "Please add a delivery address", Toast.LENGTH_SHORT).show()
@@ -257,6 +300,8 @@ fun CheckoutDialog(
 //  Profile
 // ---------------------------------------------------------------------
 
+// *** PROFILE SCREEN ***
+// Shows the user's details, the settings menu, tiles (Orders, Saved, Outfits, Try-Ons, Address) and My Orders
 @Composable
 fun ProfileScreen(
     db: UserDatabase,
@@ -274,12 +319,14 @@ fun ProfileScreen(
 ) {
     val context = LocalContext.current
     val email = user?.email ?: ""
+    // *** ORDERS PER USER: reads only THIS user's orders from orders.csv ***
     var orders by remember(email) { mutableStateOf(loadOrders(context, email)) }   // this user's orders only
     var menuOpen by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf(false) }
     var changingPassword by remember { mutableStateOf(false) }
     var info by remember { mutableStateOf<String?>(null) }       // small info pop-ups
     var orderTab by remember { mutableStateOf("All") }
+    // How many try-on looks this user has saved (from SQLite)
     val looksCount = remember(email) { if (email.isEmpty()) 0 else db.loadLooks(email).size }
     val name = user?.name ?: "Guest"
 
@@ -289,10 +336,14 @@ fun ProfileScreen(
             Text("My Profile", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Ink)
             Spacer(Modifier.weight(1f))
             Box {
+                // *** SETTINGS MENU (gear icon) ***: edit profile, change password, clear orders, payment
+                // methods, about, log out
                 IconButton(onClick = { menuOpen = true }) { Icon(Icons.Default.Settings, contentDescription = "Settings") }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     DropdownMenuItem(text = { Text("Edit profile") }, onClick = { menuOpen = false; editing = true })
+                    // Opens the Change password box
                     DropdownMenuItem(text = { Text("Change password") }, onClick = { menuOpen = false; changingPassword = true })
+                    // Deletes only this user's orders from orders.csv
                     DropdownMenuItem(text = { Text("Clear order history") }, onClick = {
                         menuOpen = false
                         clearOrders(context, email)
@@ -301,19 +352,22 @@ fun ProfileScreen(
                     })
                     DropdownMenuItem(text = { Text("Payment methods") }, onClick = {
                         menuOpen = false
-                        info = payments.joinToString("\n") + "\n\nOnline payments are handled securely by Razorpay. TryVerse never sees or stores your card or UPI details."
+                        info = payments.joinToString("\n") + "\n\nOnline payments are handled securely by ${Payment.provider}. TryVerse never sees or stores your card or UPI details."
                     })
                     DropdownMenuItem(text = { Text("About TryVerse") }, onClick = {
                         menuOpen = false
                         info = "TryVerse 2.0\nTry clothes on live with your camera, or get an AI photo of you wearing them.\n\n" +
                                 "Garment and model images: OOTDiffusion examples (CC BY-NC-SA 4.0), used for a non-commercial college project."
                     })
+                    // Log out: MainActivity forgets the logged-in user (their data stays saved in SQLite for
+                    // next login)
                     DropdownMenuItem(text = { Text("Log out") }, onClick = { menuOpen = false; onLogout() })
                 }
             }
         }
 
         // Profile card
+        // Profile card: a circle with the initials (e.g. Manvi Segan -> MS), name, email, phone, Edit button
         Row(Modifier.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(70.dp).clip(CircleShape).background(Accent), contentAlignment = Alignment.Center) {
                 Text(
@@ -335,6 +389,7 @@ fun ProfileScreen(
         }
 
         // My size (from Live Try-On: height + body scan)
+        // *** SIZE SUGGESTION: shows the user's sizes worked out from the live camera body scan ***
         if (user != null && user.heightCm > 0) {
             Text(
                 "Height ${user.heightCm} cm  •  " +
@@ -347,6 +402,7 @@ fun ProfileScreen(
         }
 
         // Tiles
+        // The 5 tiles with counts. Tapping a tile opens that screen
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ProfileTile(Icons.Default.Inventory2, "Orders", "${orders.size}", Modifier.weight(1f)) { orderTab = "All" }
             ProfileTile(Icons.Default.FavoriteBorder, "Saved", "$wishlistCount", Modifier.weight(1f), onSaved)
@@ -358,13 +414,17 @@ fun ProfileScreen(
         // My Orders (read from orders.csv)
         Spacer(Modifier.height(18.dp))
         Text("My Orders", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Ink)
+        // *** MY ORDERS ***
+        // Tabs to filter the orders by status: All, Processing, Shipped, Delivered, Cancelled
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf("All", "Processing", "Shipped", "Delivered", "Cancelled").forEach {
                 FilterChip(selected = orderTab == it, onClick = { orderTab = it }, label = { Text(it) })
             }
         }
+        // Only the orders with the chosen status
         val shown = orders.filter { orderTab == "All" || it.status == orderTab }
         if (shown.isEmpty()) Text("No orders here yet.", color = Muted, modifier = Modifier.padding(vertical = 8.dp))
+        // One card per order. Tapping it opens the Order Details screen
         shown.forEach { order ->
             Card(
                 Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { onOrder(order) },
@@ -389,6 +449,7 @@ fun ProfileScreen(
     }
 
     // Edit profile dialog (saved in SQLite)
+    // *** EDIT PROFILE BOX ***: change name and phone (checked), saved in SQLite with db.updateUser
     if (editing && user != null) {
         var newName by remember { mutableStateOf(user.name) }
         var newPhone by remember { mutableStateOf(user.phone) }
@@ -418,10 +479,12 @@ fun ProfileScreen(
         )
     }
 
+    // Change password box
     if (changingPassword && user != null) {
         ChangePasswordDialog(db, user.email, onDone = { changingPassword = false })
     }
 
+    // Small info box (Payment methods, About TryVerse)
     if (info != null) {
         AlertDialog(
             onDismissRequest = { info = null },
@@ -431,7 +494,7 @@ fun ProfileScreen(
     }
 }
 
-/** Coloured label for an order status. */
+// Coloured order status label: green = Delivered, gold = Shipped, red = Cancelled, orange = Processing
 @Composable
 fun StatusChip(status: String) {
     val colour = when (status) {
@@ -446,7 +509,8 @@ fun StatusChip(status: String) {
     )
 }
 
-/** Change password: current password, new password and confirm; saved hashed in SQLite. */
+// *** CHANGE PASSWORD ***
+// Current password + new password + confirm. The new one is saved HASHED in SQLite
 @Composable
 fun ChangePasswordDialog(db: UserDatabase, email: String, onDone: () -> Unit) {
     val context = LocalContext.current
@@ -455,12 +519,14 @@ fun ChangePasswordDialog(db: UserDatabase, email: String, onDone: () -> Unit) {
     var confirm by remember { mutableStateOf("") }
     var tried by remember { mutableStateOf(false) }          // show all errors after Save is pressed
     var wrongCurrent by remember { mutableStateOf(false) }
+    // New password rules: 8+ characters with a letter and a number, and different from the current one
     val newError = when {
         !tried && newPassword.isEmpty() -> null
         !Validate.password(newPassword) -> "8+ characters with a letter and a number"
         newPassword == current -> "Choose a different password from the current one"
         else -> null
     }
+    // Confirm must be the same as the new password
     val confirmError = if ((tried || confirm.isNotEmpty()) && confirm != newPassword) "Passwords do not match" else null
 
     AlertDialog(
@@ -477,6 +543,7 @@ fun ChangePasswordDialog(db: UserDatabase, email: String, onDone: () -> Unit) {
             TextButton(onClick = {
                 tried = true
                 if (!Validate.password(newPassword) || newPassword == current || confirm != newPassword) return@TextButton
+                // *** DATABASE: checks the CURRENT password first; only if it is right is the new one saved ***
                 if (db.changePassword(email, current, newPassword)) {
                     Toast.makeText(context, "Password changed", Toast.LENGTH_SHORT).show()
                     onDone()
@@ -489,7 +556,7 @@ fun ChangePasswordDialog(db: UserDatabase, email: String, onDone: () -> Unit) {
     )
 }
 
-/** Password text box with an error message under it. */
+// A password box (shows dots) with a red error under it
 @Composable
 fun PasswordBox(value: String, onChange: (String) -> Unit, label: String, error: String?) {
     OutlinedTextField(
@@ -501,6 +568,7 @@ fun PasswordBox(value: String, onChange: (String) -> Unit, label: String, error:
     )
 }
 
+// One small tile on the profile: icon, title (e.g. Orders) and a count
 @Composable
 fun ProfileTile(icon: ImageVector, title: String, subtitle: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Column(

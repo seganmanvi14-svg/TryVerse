@@ -1,14 +1,22 @@
+<!-- ===================================================================== -->
+<!-- AndroidManifest.xml = the app's ID card for Android. -->
+<!-- It lists: the permissions we ask for, our screens (activities), which screen opens first, -->
+<!-- and the Google Maps / Google Pay settings. -->
+<!-- ===================================================================== -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- CAMERA: needed for the live try-on. INTERNET: needed for Google Maps, Google Pay and the AI analysis -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Location: only to start the address map at where the user is (asked when they tap "my location") -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- required=false: the app can still be installed on a phone without a camera (live try-on just won't work) -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <!-- tools:replace keeps our "no backup" setting even if a library (e.g. Razorpay) asks for backup -->
+    <!-- The app itself: no backups of user data, only secure (https) internet, app name, theme -->
     <application
         android:allowBackup="false"
         tools:replace="android:allowBackup"
@@ -18,19 +26,32 @@
         android:label="TryVerse"
         android:supportsRtl="true"
         android:theme="@style/Theme.StyleTryOn">
+        <!-- MainActivity = the first and main screen. All app screens are drawn inside it with Compose -->
         <activity
             android:name=".MainActivity"
             android:exported="true">
+            <!-- MAIN + LAUNCHER = show this activity as the app icon and open it first -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <!-- Opens Razorpay's checkout and returns the payment result to the cart -->
+        <!-- PaymentActivity: the see-through screen that opens Google Pay (or the test checkout / Razorpay) and returns the result to the cart -->
         <activity
             android:name=".PaymentActivity"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:exported="false"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <!-- Google Maps API key (comes from MAPS_API_KEY in local.properties) -->
+        <!-- *** GOOGLE MAPS API KEY: ${MAPS_API_KEY} is filled in from local.properties when we build (never typed -->
+        <!-- here, so it is not on GitHub) *** -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="${MAPS_API_KEY}" />
+        <!-- Lets the app use the Google Pay API -->
+        <!-- *** GOOGLE PAY: tells Google Play services this app uses the Google Pay API *** -->
+        <meta-data
+            android:name="com.google.android.gms.wallet.api.enabled"
+            android:value="true" />
     </application>
 </manifest>
