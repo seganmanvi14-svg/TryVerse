@@ -65,7 +65,8 @@ fun TryVerseApp() {
     val db = remember { UserDatabase(context) }
 
     // Simple navigation: a list of screen names, the last one is shown
-    val stack = remember { mutableStateListOf("splash") }
+    // Already logged in: open Home straight away; otherwise start on the welcome screen
+    val stack = remember { mutableStateListOf(if (loadSession(context)?.let { db.getUser(it) } != null) "home" else "splash") }
     val screen = stack.last()
     fun go(to: String) { stack.add(to) }
     fun back() { if (stack.size > 1) stack.removeAt(stack.lastIndex) }

@@ -38,14 +38,14 @@ class SleeveFit(val rootX: Float, val rootY: Float, val endX: Float, val endY: F
  *  lowY, lowL, lowR = the waist (dresses, peplum tops) or hem (tops); for pants: the leg hems
  *  lowT = where the low line goes on the body: 0.6 = waist, 1.05 = just below the hips
  *  sleeve = the left sleeve, so it can turn with the arm (null = keep sleeves as they are)
- *  drape = how much narrower a skirt hangs on the body than when laid flat (1 = no change)
+ *  drape = how much narrower the hem of a skirt hangs than when laid flat (1 = no change)
  */
 class GarmentFit(
     val topY: Float, val topL: Float, val topR: Float,
     val lowY: Float, val lowL: Float, val lowR: Float,
     val lowT: Float,
     val sleeve: SleeveFit? = null,
-    val drape: Float = 0.85f
+    val drape: Float = 0.9f
 )
 
 private val garmentFits = mapOf(
@@ -53,7 +53,7 @@ private val garmentFits = mapOf(
     R.drawable.dress_emerald_tulle to GarmentFit(0.06f, 0.18f, 0.82f, 0.29f, 0.28f, 0.74f, 0.60f, SleeveFit(0.18f, 0.06f, 0.06f, 0.12f, false)),
     R.drawable.dress_sunset_print to GarmentFit(0.02f, 0.26f, 0.74f, 0.26f, 0.26f, 0.74f, 0.60f),
     R.drawable.top_striped_knit to GarmentFit(0.07f, 0.15f, 0.85f, 0.97f, 0.18f, 0.82f, 1.05f, SleeveFit(0.15f, 0.07f, 0.10f, 0.88f, true)),
-    R.drawable.top_blush_blouse to GarmentFit(0.04f, 0.14f, 0.86f, 0.90f, 0.22f, 0.78f, 1.05f, SleeveFit(0.14f, 0.04f, 0.06f, 0.90f, true)),
+    R.drawable.top_blush_blouse to GarmentFit(0.10f, 0.14f, 0.86f, 0.90f, 0.22f, 0.78f, 1.05f, SleeveFit(0.14f, 0.04f, 0.06f, 0.90f, true)),
     R.drawable.top_red_floral to GarmentFit(0.06f, 0.12f, 0.88f, 0.45f, 0.25f, 0.75f, 0.60f),
     R.drawable.tee_midnight_fuji to GarmentFit(0.10f, 0.25f, 0.75f, 0.97f, 0.20f, 0.80f, 1.05f, SleeveFit(0.25f, 0.10f, 0.06f, 0.40f, false)),
     R.drawable.tee_dalmatian to GarmentFit(0.08f, 0.24f, 0.76f, 0.97f, 0.20f, 0.82f, 1.05f, SleeveFit(0.24f, 0.08f, 0.07f, 0.33f, false)),
@@ -69,7 +69,7 @@ private val garmentFits = mapOf(
     R.drawable.tee_sunset_print to GarmentFit(0.10f, 0.26f, 0.74f, 0.97f, 0.16f, 0.84f, 1.05f, SleeveFit(0.24f, 0.10f, 0.03f, 0.43f, false)),
     R.drawable.kurti_pink_embroidered to GarmentFit(0.05f, 0.22f, 0.78f, 0.62f, 0.20f, 0.80f, 1.05f, SleeveFit(0.22f, 0.05f, 0.04f, 0.50f, false)),
     R.drawable.dress_black_satin to GarmentFit(0.02f, 0.12f, 0.87f, 0.30f, 0.27f, 0.71f, 0.60f),
-    R.drawable.dress_yellow_floral to GarmentFit(0.02f, 0.27f, 0.72f, 0.38f, 0.35f, 0.65f, 0.70f, drape = 0.5f),
+    R.drawable.dress_yellow_floral to GarmentFit(0.02f, 0.27f, 0.72f, 0.38f, 0.35f, 0.65f, 0.70f),
     R.drawable.dress_lavender_oneshoulder to GarmentFit(0.06f, 0.0f, 0.78f, 0.42f, 0.08f, 0.70f, 0.60f),
     R.drawable.pants_black_wideleg to GarmentFit(0.01f, 0.24f, 0.72f, 0.99f, 0.02f, 0.98f, 1f),
     R.drawable.pants_lightwash_jeans to GarmentFit(0.01f, 0.17f, 0.83f, 0.99f, 0.02f, 0.98f, 1f),
@@ -206,10 +206,13 @@ private fun bodyLine(body: Body, center: Offset, across: Offset, min: Float, max
 }
 
 /**
- * The two body lines the garment is pinned to (top-left, top-right, low-left, low-right):
- *  - tops and dresses: shoulder line, and the waist (dresses, peplum) or hip line (tops)
- *  - pants: waist line (just above the hips), and the hem line at the ankles
+ * The body lines the garment is pinned to. Returns 6 points:
+ *  - tops and dresses: shoulder line (left, right), waist or hip line (left, right), and the
+ *    hip line a skirt should hug (left, right)
+ *  - pants: waist line, hem line at the ankles, and the hip line (widest part of the legs)
  * Widths come from the person's measured outline, so the fit follows each body type.
+ * The shoulder, hip and ankle points are the body JOINTS (as ML Kit finds them), so the
+ * outline of the body is a little wider than these points.
  */
 fun bodyLines(product: Product, body: Body, size: Float): List<Offset>? {
     val fit = fitOf(product)
@@ -229,23 +232,50 @@ fun bodyLines(product: Product, body: Body, size: Float): List<Offset>? {
 
     if (product.type == "PANTS") {
         val (waistL, waistR) = bodyLine(body, hips - down * (hw * 0.6f), across, hw * 1.4f, hw * 2.3f, hw * 1.9f, 1.05f * size)
+        // Hip line: the widest part, so the trousers cover the hips and thighs
+        val (hipL, hipR) = bodyLine(body, hips + down * (hw * 0.15f), across, hw * 1.5f, hw * 2.8f, hw * 2.1f, 1.08f * size)
         val (aA, aB) = if (body.ankleA != null && body.ankleB != null) leftRight(body.ankleA, body.ankleB)
         else Pair(hA + down * (sw * 2.6f), hB + down * (sw * 2.6f))
         val aw = (aB - aA).getDistance()
         val ankleAcross = if (aw > 1f) (aB - aA) / aw else across
         val hem = (aA + aB) / 2f + down * (hw * 0.15f)
-        val hemHalf = maxOf(aw + hw * 0.9f, hw * 1.2f) * size / 2f
-        return listOf(waistL, waistR, hem - ankleAcross * hemHalf, hem + ankleAcross * hemHalf)
+        val hemHalf = maxOf(aw + hw * 1.15f, hw * 1.4f) * size / 2f
+        return listOf(waistL, waistR, hem - ankleAcross * hemHalf, hem + ankleAcross * hemHalf, hipL, hipR)
     }
 
-    // Shoulder line: the garment's shoulder seams sit on the shoulders
+    // Shoulder line: the garment's shoulder seams sit just outside the shoulder joints
     val top = shoulders - down * (sw * 0.05f)
-    val topHalf = sw * 1.12f * size / 2f
-    // Low line: measured waist (dresses, peplum tops) or hips (tops)
+    val topHalf = sw * 1.16f * size / 2f
+    // Low line: measured waist (dresses, peplum tops) or hips (tops).
+    // The waist is never wider than the hips allow (arms held close to the body can make the outline look wider).
     val lowCenter = shoulders + (hips - shoulders) * fit.lowT
-    val (lowL, lowR) = if (fit.lowT < 1f) bodyLine(body, lowCenter, across, sw * 0.6f, sw * 1.15f, sw * 0.85f, 1.06f * size)   // waist
-                       else bodyLine(body, lowCenter, across, sw * 0.7f, sw * 1.4f, sw, 1.06f * size)                          // hips
-    return listOf(top - across * topHalf, top + across * topHalf, lowL, lowR)
+    val (lowL, lowR) = if (fit.lowT < 1f) bodyLine(body, lowCenter, across, minOf(sw * 0.6f, hw * 1.2f), minOf(sw * 1.15f, hw * 1.6f), minOf(sw * 0.85f, hw * 1.45f), 1.06f * size)   // waist
+    else bodyLine(body, lowCenter, across, sw * 0.7f, sw * 1.4f, sw, 1.06f * size)                                                                       // hips
+    // Hip line for skirts: a skirt sits close to the hips before it flares out
+    val (hipL, hipR) = bodyLine(body, hips + down * (hw * 0.3f), across, minOf(sw * 0.7f, hw * 1.5f), minOf(sw * 1.5f, hw * 2.3f), minOf(sw, hw * 2f), 1.15f * size)
+    return listOf(top - across * topHalf, top + across * topHalf, lowL, lowR, hipL, hipR)
+}
+
+/** How wide the garment photo is (fraction of the photo width) at height [fy], read from its see-through pixels. */
+private val rowWidths = HashMap<Int, FloatArray>()
+
+private fun garmentWidthAt(garment: Bitmap, key: Int, fy: Float): Float {
+    val widths = rowWidths.getOrPut(key) {
+        val rows = 50
+        val line = IntArray(garment.width)
+        FloatArray(rows + 1) { i ->
+            try {
+                val y = (i * (garment.height - 1)) / rows
+                garment.getPixels(line, 0, garment.width, 0, y, garment.width, 1)
+                val first = line.indexOfFirst { (it ushr 24) > 128 }
+                val last = line.indexOfLast { (it ushr 24) > 128 }
+                if (first < 0) 0f else (last - first + 1).toFloat() / garment.width
+            } catch (e: Exception) {
+                0f                                          // pixels can't be read (hardware bitmap): no narrowing
+            }
+        }
+    }
+    return widths[(fy.coerceIn(0f, 1f) * (widths.size - 1)).toInt()]
 }
 
 private fun rotate(v: Offset, angle: Float): Offset {
@@ -267,31 +297,50 @@ fun drawGarmentMesh(canvas: android.graphics.Canvas, garment: Bitmap, product: P
     val fit = fitOf(product)
     val lines = bodyLines(product, body, size) ?: return
     val (tl, tr, bl, br) = lines
+    val hipL = lines[4]
+    val hipR = lines[5]
     val gw = garment.width.toFloat()
     val gh = garment.height.toFloat()
     val acrossDir = unit(tr - tl)
     val downDir = unit((bl + br) / 2f - (tl + tr) / 2f)
     val topScale = (tr - tl).getDistance() / ((fit.topR - fit.topL) * gw)
+    val lowScale = (br - bl).getDistance() / ((fit.lowR - fit.lowL) * gw)
+
+    // Skirts: narrow the skirt so it sits close to the hips (a dress laid flat is wider than a body)
+    var hipNarrow = 1f
+    var hipRow = fit.lowY + 0.1f
+    if (product.type != "PANTS" && fit.lowY < 0.8f) {
+        hipRow = (fit.lowY + ((hipL + hipR) / 2f - (bl + br) / 2f).getDistance() / (gh * lowScale)).coerceIn(fit.lowY + 0.02f, 0.98f)
+        val flatWidth = garmentWidthAt(garment, product.image, hipRow) * gw * lowScale
+        if (flatWidth > 0f) hipNarrow = minOf(1f, (hipR - hipL).getDistance() / flatWidth)
+    }
+    // Pants: the hip line sits this far down the garment photo
+    val pantsHipRow = 0.17f
 
     // The garment itself, without sleeve turning
     fun torso(fx: Float, fy: Float): Offset = when {
         fy < fit.topY ->                                      // collar and shoulders
             mix(tl, tr, (fx - fit.topL) / (fit.topR - fit.topL)) - downDir * ((fit.topY - fy) * gh * topScale)
         fy > fit.lowY -> {                                    // skirt, hem, trouser legs
-            val scale = (br - bl).getDistance() / ((fit.lowR - fit.lowL) * gw)
-            // A skirt is full width at the waist and hangs narrower towards the hem than when laid flat
+            // A skirt hugs the hips, then hangs a little narrower towards the hem than when laid flat
             val t = ((fy - fit.lowY) / (1f - fit.lowY)).coerceIn(0f, 1f)
-            val drape = if (product.type == "PANTS") 1f else 1f - (1f - fit.drape) * t
+            val narrow = if (product.type == "PANTS") 1f
+            else (1f + (hipNarrow - 1f) * ((fy - fit.lowY) / (hipRow - fit.lowY)).coerceIn(0f, 1f)) * (1f - (1f - fit.drape) * t)
             // Trouser legs follow the body; skirts hang straight down (gravity), even if the person leans
             val hang = if (product.type == "PANTS") downDir else Offset(0f, 1f)
-            (bl + br) / 2f + unit(br - bl) * ((fx - (fit.lowL + fit.lowR) / 2f) * gw * scale * drape) + hang * ((fy - fit.lowY) * gh * scale)
+            (bl + br) / 2f + unit(br - bl) * ((fx - (fit.lowL + fit.lowR) / 2f) * gw * lowScale * narrow) + hang * ((fy - fit.lowY) * gh * lowScale)
         }
         else -> {                                             // body of the garment
             val v = (fy - fit.topY) / (fit.lowY - fit.topY)
             val l = fit.topL + (fit.lowL - fit.topL) * v
             val r = fit.topR + (fit.lowR - fit.topR) * v
             val u = (fx - l) / (r - l)
-            mix(mix(tl, tr, u), mix(bl, br, u), v)
+            if (product.type == "PANTS") {
+                // Waist -> hips -> ankles, so the trousers are widest at the hips like a real body
+                val vh = ((pantsHipRow - fit.topY) / (fit.lowY - fit.topY)).coerceIn(0.05f, 0.95f)
+                if (v < vh) mix(mix(tl, tr, u), mix(hipL, hipR, u), v / vh)
+                else mix(mix(hipL, hipR, u), mix(bl, br, u), (v - vh) / (1f - vh))
+            } else mix(mix(tl, tr, u), mix(bl, br, u), v)
         }
     }
 
@@ -368,6 +417,19 @@ fun recolorFilter(c: Color): ColorMatrixColorFilter {
 //  Demo model (Home banner, welcome screen, product page) — no ML needed
 // ---------------------------------------------------------------------
 
+/**
+ * Body joints of the demo model photo (demo_model.webp), as fractions of the photo:
+ * shoulders A/B, hips A/B, ankles A/B, elbows A/B, wrists A/B, each as x, y.
+ * She wears a fitted top and leggings and stands straight, so any garment covers them neatly.
+ */
+private val demoPoints = floatArrayOf(
+    0.401f, 0.305f, 0.571f, 0.305f,      // shoulders
+    0.432f, 0.49f, 0.538f, 0.49f,      // hips
+    0.418f, 0.907f, 0.541f, 0.907f,      // ankles
+    0.376f, 0.454f, 0.591f, 0.454f,      // elbows
+    0.365f, 0.573f, 0.599f, 0.573f       // wrists
+)
+
 /** [under] = an optional bottom drawn under [product] (mix & match outfit). */
 @Composable
 fun DemoModelTryOn(product: Product?, modifier: Modifier = Modifier, under: Product? = null) {
@@ -384,14 +446,12 @@ fun DemoModelTryOn(product: Product?, modifier: Modifier = Modifier, under: Prod
         drawImage(model, dstOffset = IntOffset(x0.toInt(), y0.toInt()), dstSize = IntSize(w.toInt(), h.toInt()), filterQuality = FilterQuality.High)
 
         if (product != null && garment != null) {
-            // Body points of the model photo (fractions of the photo size)
-            fun at(fx: Float, fy: Float) = Offset(x0 + fx * w, y0 + fy * h)
+            // Body points of the model photo
+            val p = demoPoints
+            fun at(i: Int) = Offset(x0 + p[i] * w, y0 + p[i + 1] * h)
             val body = Body(
-                shoulderA = at(0.385f, 0.195f), shoulderB = at(0.615f, 0.195f),
-                hipA = at(0.455f, 0.47f), hipB = at(0.595f, 0.47f),
-                ankleA = at(0.44f, 0.86f), ankleB = at(0.54f, 0.875f),
-                elbowA = at(0.35f, 0.35f), elbowB = at(0.635f, 0.35f),
-                wristA = at(0.335f, 0.51f), wristB = at(0.665f, 0.51f)
+                shoulderA = at(0), shoulderB = at(2), hipA = at(4), hipB = at(6), ankleA = at(8), ankleB = at(10),
+                elbowA = at(12), elbowB = at(14), wristA = at(16), wristB = at(18)
             )
             drawIntoCanvas {
                 if (under != null && underGarment != null) drawGarmentMesh(it.nativeCanvas, underGarment.asAndroidBitmap(), under, body)

@@ -103,7 +103,7 @@ fun CartScreen(
                         value = coupon, onValueChange = { coupon = it.uppercase() },
                         placeholder = { Text("Enter code (try TRYVERSE10)") }, singleLine = true,
                         modifier = Modifier.weight(1f), shape = RoundedCornerShape(14.dp),
-                        colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = Color.White, focusedContainerColor = Color.White)
+                        colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = Paper, focusedContainerColor = Paper)
                     )
                     TextButton(onClick = {
                         discountPercent = if (coupon.trim() == "TRYVERSE10") 10 else 0
@@ -116,7 +116,7 @@ fun CartScreen(
 
         // Bottom bar
         if (cart.isNotEmpty()) {
-            Column(Modifier.fillMaxWidth().background(Color.White).padding(16.dp)) {
+            Column(Modifier.fillMaxWidth().background(Paper).padding(16.dp)) {
                 Text("Total", color = Muted, fontSize = 12.sp)
                 Text(rupees(total), fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Ink)
                 Spacer(Modifier.height(8.dp))
@@ -318,7 +318,7 @@ fun ProfileScreen(
             Box(Modifier.size(70.dp).clip(CircleShape).background(Accent), contentAlignment = Alignment.Center) {
                 Text(
                     name.split(" ").mapNotNull { it.firstOrNull()?.uppercase() }.take(2).joinToString(""),
-                    color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold
+                    color = OnInk, fontSize = 24.sp, fontWeight = FontWeight.Bold
                 )
             }
             Spacer(Modifier.width(14.dp))
@@ -368,7 +368,7 @@ fun ProfileScreen(
         shown.forEach { order ->
             Card(
                 Modifier.fillMaxWidth().padding(vertical = 4.dp).clickable { onOrder(order) },
-                shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White)
+                shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Paper)
             ) {
                 Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
                     ProductImage(order.lines.first().product, Modifier.size(56.dp, 66.dp), padding = 5)
@@ -504,7 +504,7 @@ fun PasswordBox(value: String, onChange: (String) -> Unit, label: String, error:
 @Composable
 fun ProfileTile(icon: ImageVector, title: String, subtitle: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Column(
-        modifier.clip(RoundedCornerShape(16.dp)).background(Color.White).clickable { onClick() }.padding(vertical = 12.dp),
+        modifier.clip(RoundedCornerShape(16.dp)).background(Paper).clickable { onClick() }.padding(vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(icon, contentDescription = null, tint = Accent)

@@ -88,7 +88,7 @@ fun AddressListScreen(
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(addresses, key = { it.id }) { a ->
                     Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Color.White).padding(14.dp),
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Paper).padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(Modifier.size(42.dp).clip(CircleShape).background(PrimaryLight), contentAlignment = Alignment.Center) {
@@ -204,13 +204,13 @@ fun AddressMapScreen(start: SavedAddress?, onBack: () -> Unit, onSave: (SavedAdd
             Text(
                 "Move the map to place the pin on your door",
                 Modifier.align(Alignment.TopCenter).padding(top = 10.dp).clip(RoundedCornerShape(20.dp))
-                    .background(Ink.copy(alpha = 0.75f)).padding(horizontal = 12.dp, vertical = 6.dp),
+                    .background(Color.Black.copy(alpha = 0.65f)).padding(horizontal = 12.dp, vertical = 6.dp),
                 color = Color.White, fontSize = 12.sp
             )
             SmallFloatingActionButton(
                 onClick = { askForLocation() },
                 modifier = Modifier.align(Alignment.BottomEnd).padding(14.dp),
-                containerColor = Color.White
+                containerColor = Paper
             ) { Icon(Icons.Default.MyLocation, contentDescription = "My location", tint = Primary) }
             Text(
                 "© OpenStreetMap contributors", fontSize = 10.sp, color = Ink,
@@ -220,7 +220,7 @@ fun AddressMapScreen(start: SavedAddress?, onBack: () -> Unit, onSave: (SavedAdd
 
         // ---------------- Address details ----------------
         Column(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)).background(Color.White).padding(16.dp),
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)).background(Paper).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {

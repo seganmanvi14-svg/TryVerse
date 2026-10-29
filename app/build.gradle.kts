@@ -1,4 +1,3 @@
-import java.util.Properties
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -12,9 +11,10 @@ if (file("google-services.json").exists()) {
 }
 
 // Razorpay TEST key id, read from local.properties (that file is never committed to GitHub)
-val localProperties = Properties()
-val localPropertiesFile = rootProject.file("local.properties")
-if (localPropertiesFile.exists()) localPropertiesFile.inputStream().use { localProperties.load(it) }
+fun localProperty(name: String): String = rootProject.file("local.properties").let { f ->
+    if (f.exists()) f.readLines().firstOrNull { it.trim().startsWith("$name=") }?.substringAfter("=")?.trim() ?: ""
+    else ""
+}
 
 android {
     namespace = "com.example.styletryon"
@@ -26,7 +26,14 @@ android {
         targetSdk = 35
         versionCode = 12
         versionName = "3.0"
-        buildConfigField("String", "RAZORPAY_KEY", "\"${localProperties.getProperty("RAZORPAY_KEY", "")}\"")
+        buildConfigField("String", "RAZORPAY_KEY", "\"${localProperty("RAZORPAY_KEY")}\"")
+    }
+
+    // Our Kotlin files sit in a folder called " java" (with a space) in the repo; compile it too
+    sourceSets {
+        getByName("main") {
+            java.srcDir("src/main/ java")
+        }
     }
 
     buildTypes {
